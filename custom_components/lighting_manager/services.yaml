@@ -1,0 +1,36 @@
+insert_scene:
+  description: Apply a scene to lights
+  fields:
+    entity_id:
+      description: entity_id of scene to apply
+      example: "scene.name_of_scene"
+    priority:
+      description: Layer priority of scene (Higher the more visible)
+      example: "0"
+
+remove_scene:
+  description: Remomve scene from light layers
+  fields:
+    entity_id:
+      description: entity_id of scene to remove
+      example: "scene.name_of_scene"
+
+push_state:
+  description: Set light or group state at layer.
+  fields:
+    entity_id:
+      description: entity_id of light or group
+      example: "light"
+    priority:
+      description: Layer priority of state
+      example: "0"
+    layer_name:
+      description: Unique identifier of layer
+      example: "my_layer_name"
+    attributes:
+
+
+pop_state:
+  description: Remove state from layers.
+  fields:
+    entity:
