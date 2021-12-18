@@ -1,5 +1,12 @@
 from typing import List
-from homeassistant.const import ATTR_ENTITY_ID, ATTR_ID, ATTR_STATE, CONF_ENTITIES, STATE_OFF, STATE_ON
+from homeassistant.const import (
+    ATTR_ENTITY_ID,
+    ATTR_ID,
+    ATTR_STATE,
+    CONF_ENTITIES,
+    STATE_OFF,
+    STATE_ON,
+)
 from homeassistant.components.light import (
     ATTR_COLOR_MODE,
     ATTR_BRIGHTNESS,
@@ -15,9 +22,11 @@ from homeassistant.components.light import (
     ATTR_WHITE_VALUE,
     ATTR_XY_COLOR,
     ATTR_FLASH,
-    LIGHT_TURN_ON_SCHEMA
+    LIGHT_TURN_ON_SCHEMA,
 )
 from homeassistant.components.light import DOMAIN as DOMAIN_LIGHT
+from homeassistant.components.group import DOMAIN as DOMAIN_GROUP
+from homeassistant import core as ha
 from homeassistant.core import Config, HomeAssistant, ServiceCall, State, callback
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.state import async_reproduce_state
@@ -35,8 +44,7 @@ DATA_HA_SCENE = "homeassistant_scene"
 
 SERVICE_INSERT_SCENE = "insert_scene"
 SERVICE_INSERT_STATE = "insert_state"
-SERVICE_REMOVE_SCENE = "remove_scene"
-SERVICE_REMOVE_STATE = "remove_state"
+SERVICE_REMOVE_LAYER = "remove_layer"
 
 ATTR_PRIORITY = "priority"
 ATTR_ATTRIBUTES = "attributes"
@@ -76,27 +84,19 @@ SERVICE_INSERT_SCENE_SCHEMA = vol.Schema(
     }
 )
 
-SERVICE_REMOVE_SCENE_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_ENTITY_ID): cv.string,
-    }
-)
-
 SERVICE_INSERT_STATE_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.string,
         vol.Required(ATTR_PRIORITY): cv.positive_int,
         vol.Required(ATTR_ID): cv.string,
-        vol.Required(ATTR_ATTRIBUTES): LIGHT_TURN_ON_SCHEMA
+        vol.Required(ATTR_ATTRIBUTES): LIGHT_TURN_ON_SCHEMA,
     }
 )
 
-SERVICE_REMOVE_STATE_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_ENTITY_ID): cv.string,
-        vol.Required(ATTR_ID): cv.string
-    }
+SERVICE_REMOVE_LAYER_SCHEMA = vol.Schema(
+    {vol.Optional(ATTR_ENTITY_ID): cv.string, vol.Required(ATTR_ID): cv.string}
 )
+
 
 def setup(hass: HomeAssistant, config: Config):
 
@@ -112,7 +112,7 @@ def setup(hass: HomeAssistant, config: Config):
     def on_state_change(event):
         state = event.data.get("new_state")
         if (
-            state.entity_id.split(".")[0] == DOMAIN_LIGHT
+            ha.split_entity_id(state.entity_id)[0] == DOMAIN_LIGHT
             and state.entity_id in hass.data[DOMAIN][DATA_ENTITIES]
         ):
             _LOGGER.info(state)
@@ -126,14 +126,17 @@ def setup(hass: HomeAssistant, config: Config):
         else:
             active_state = None
             for layer in hass.data[DOMAIN][DATA_STATES][entity_id]:
-                if active_state == None or hass.data[DOMAIN][DATA_STATES][entity_id][layer][ATTR_PRIORITY] > active_state[ATTR_PRIORITY]:
+                if (
+                    active_state == None
+                    or hass.data[DOMAIN][DATA_STATES][entity_id][layer][ATTR_PRIORITY]
+                    > active_state[ATTR_PRIORITY]
+                ):
                     active_state = hass.data[DOMAIN][DATA_STATES][entity_id][layer]
 
             return active_state[ATTR_STATE]
 
-
     async def apply_lights(entities: List, additional_states: List):
-        states=additional_states
+        states = additional_states
         for entity_id in entities:
             states.append(render_light(entity_id))
 
@@ -147,8 +150,8 @@ def setup(hass: HomeAssistant, config: Config):
             hass.data[DATA_HA_SCENE].entities[scene_entity_id].scene_config.states
         )
 
-        non_managed_entities=[]
-        affected_entities=[]
+        non_managed_entities = []
+        affected_entities = []
 
         for entity_id in entity_states:
             if entity_id in hass.data[DOMAIN][DATA_STATES]:
@@ -159,27 +162,11 @@ def setup(hass: HomeAssistant, config: Config):
                 affected_entities.append(entity_id)
             else:
                 non_managed_entities.append(entity_states[entity_id])
-                
+
         await apply_lights(affected_entities, non_managed_entities)
 
     hass.services.register(
         DOMAIN, SERVICE_INSERT_SCENE, insert_scene, SERVICE_INSERT_SCENE_SCHEMA
-    )
-
-    @callback
-    async def remove_scene(call: ServiceCall):
-        scene_entity_id = call.data.get(ATTR_ENTITY_ID)
-
-        affected_entities=[]
-        for entity_id in hass.data[DOMAIN][DATA_STATES]:
-            if scene_entity_id in hass.data[DOMAIN][DATA_STATES][entity_id]:
-                hass.data[DOMAIN][DATA_STATES][entity_id].pop(scene_entity_id)
-                affected_entities.append(entity_id)
-
-        await apply_lights(affected_entities, [])
-
-    hass.services.register(
-        DOMAIN, SERVICE_REMOVE_SCENE, remove_scene, SERVICE_REMOVE_SCENE_SCHEMA
     )
 
     @callback
@@ -189,30 +176,73 @@ def setup(hass: HomeAssistant, config: Config):
         layer_id = call.data.get(ATTR_ID)
         attributes = call.data.get(ATTR_ATTRIBUTES)
 
-        if entity_id in hass.data[DOMAIN][DATA_ENTITIES]:
-            hass.data[DOMAIN][DATA_STATES][entity_id][layer_id] = {
+        affected_entities = []
+        extra_entities = []
+
+        if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+            for light_entity in hass.components.group.get_entity_ids(
+                entity_id, DOMAIN_LIGHT
+            ):
+                if light_entity in hass.data[DOMAIN][DATA_ENTITIES]:
+                    affected_entities.append(light_entity)
+                else:
+                    extra_entities.append(light_entity)
+        elif entity_id in hass.data[DOMAIN][DATA_ENTITIES]:
+            affected_entities.append(entity_id)
+
+        for light_entity_id in affected_entities:
+            hass.data[DOMAIN][DATA_STATES][light_entity_id][layer_id] = {
                 ATTR_PRIORITY: priority,
                 ATTR_STATE: State(entity_id, STATE_ON, attributes),
             }
 
-            await apply_lights([entity_id], [])
+        extra_states = [
+            State(extra_entity_id, STATE_ON, attributes)
+            for extra_entity_id in extra_entities
+        ]
+
+        if len(affected_entities) > 0 or len(extra_states) > 0:
+            await apply_lights(affected_entities, extra_states)
 
     hass.services.register(
         DOMAIN, SERVICE_INSERT_STATE, insert_state, SERVICE_INSERT_STATE_SCHEMA
     )
 
     @callback
-    async def remove_state(call: ServiceCall):
+    async def remove_layer(call: ServiceCall):
         entity_id = call.data.get(ATTR_ENTITY_ID)
         layer_id = call.data.get(ATTR_ID)
 
-        if entity_id in hass.data[DOMAIN][DATA_ENTITIES]:
-            if layer_id in hass.data[DOMAIN][DATA_STATES][entity_id]:
-                hass.data[DOMAIN][DATA_STATES][entity_id].pop(layer_id)
-                await apply_lights([entity_id], [])
+        affected_entities = []
+
+        if entity_id:
+            if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+                for light_entity in hass.components.group.get_entity_ids(
+                    entity_id, DOMAIN_LIGHT
+                ):
+                    if (
+                        light_entity in hass.data[DOMAIN][DATA_ENTITIES]
+                        and layer_id in hass.data[DOMAIN][DATA_STATES][light_entity]
+                    ):
+                        affected_entities.append(light_entity)
+            elif (
+                entity_id in hass.data[DOMAIN][DATA_ENTITIES]
+                and layer_id in hass.data[DOMAIN][DATA_STATES][entity_id]
+            ):
+                affected_entities.append(entity_id)
+        else:
+            for light_entity_id in hass.data[DOMAIN][DATA_ENTITIES]:
+                if layer_id in hass.data[DOMAIN][DATA_STATES][light_entity_id]:
+                    affected_entities.append(light_entity_id)
+
+        for light_entity_id in affected_entities:
+            hass.data[DOMAIN][DATA_STATES][light_entity_id].pop(layer_id)
+
+        if len(affected_entities) > 0:
+            await apply_lights(affected_entities, [])
 
     hass.services.register(
-        DOMAIN, SERVICE_REMOVE_STATE, remove_state, SERVICE_REMOVE_STATE_SCHEMA
+        DOMAIN, SERVICE_REMOVE_LAYER, remove_layer, SERVICE_REMOVE_LAYER_SCHEMA
     )
 
     return True

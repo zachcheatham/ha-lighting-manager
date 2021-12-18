@@ -6,6 +6,7 @@ For example: If I want outdoor lights that are a dim white at night, I would add
 
 ## Configuration
 Example configuration.yaml entry:
+
 ```
 lighting_manager:
   entities:
@@ -15,28 +16,26 @@ lighting_manager:
     - light.foh_light_2
     - light.foh_light_3
 ```
+
 ## Services
 
 ### lighting_manager.insert_scene
+
 Apply a scene at a specified layer. All lights managed by lighting manager and in the specified scene will be updated with priority states. Any unmanaged lights and other entities will be updated as if scene.apply was called.
 
 #### Service Parameters
+
 | Parameter | Description |
 |-----------|-------------|
 | entity_id | Entity ID of scene to be inserted. |
 | priority | Layer priority. Higher values will appear before lower. |
 
-### lighting_manager.remove_scene
-Remove a scene from layers. All lights affected will be updated. This will not restore changes to unmanaged lights and other entities that are in the specified scene.
-
-#### Service Parameters
-| Parameter | Description |
-|-----------|-------------|
-| entity_id | Entity ID of scene to be removed. |
 ### lighting_manager.insert_state
-Apply lighting attributes to a light entity at the specified priority. If light was not specified in the configuration, nothing will happen.
+
+Apply lighting attributes to a light entity or group at a specified priority. If a light is specified and is not managed, nothing will happen. When a group is specified, any unmanaged lights within the group will be updated to reflect the new state.
 
 #### Service Parameters
+
 | Parameter | Description |
 |-----------|-------------|
 | entity_id | Entity ID of light. |
@@ -44,11 +43,13 @@ Apply lighting attributes to a light entity at the specified priority. If light 
 | id | Layer ID. Used when removing the state from layers.
 | attributes | A dictionary of light state attributes to be applied.
 
-### lighting_manager.remove_state
-Remove a state layer by id from the specified entity.
+### lighting_manager.remove_layer
+
+Remove a layer by id or scene by its entity id from entity id of a light or group. If not entity id is specified, layer or scene will be removed from all managed lights.
 
 #### Service Parameters
+
 | Parameter | Description |
 |-----------|-------------|
-| entity_id | Entity ID of light. |
-| id | Layer ID to be removed.
+| entity_id | Entity ID of light or group. |
+| id | Layer ID or entity id of scene to be removed.
