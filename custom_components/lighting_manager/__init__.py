@@ -1,5 +1,5 @@
 from typing import List
-from homeassistant.const import ATTR_ENTITY_ID, ATTR_STATE, CONF_ENTITIES, STATE_OFF
+from homeassistant.const import ATTR_ENTITY_ID, ATTR_ID, ATTR_STATE, CONF_ENTITIES, STATE_OFF, STATE_ON
 from homeassistant.components.light import (
     ATTR_COLOR_MODE,
     ATTR_BRIGHTNESS,
@@ -39,6 +39,7 @@ SERVICE_REMOVE_SCENE = "remove_scene"
 SERVICE_REMOVE_STATE = "remove_state"
 
 ATTR_PRIORITY = "priority"
+ATTR_ATTRIBUTES = "attributes"
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -78,6 +79,22 @@ SERVICE_INSERT_SCENE_SCHEMA = vol.Schema(
 SERVICE_REMOVE_SCENE_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.string,
+    }
+)
+
+SERVICE_INSERT_STATE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.string,
+        vol.Required(ATTR_PRIORITY): cv.positive_int,
+        vol.Required(ATTR_ID): cv.string,
+        vol.Required(ATTR_ATTRIBUTES): LIGHT_TURN_ON_SCHEMA
+    }
+)
+
+SERVICE_REMOVE_STATE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.string,
+        vol.Required(ATTR_ID): cv.string
     }
 )
 
@@ -163,6 +180,39 @@ def setup(hass: HomeAssistant, config: Config):
 
     hass.services.register(
         DOMAIN, SERVICE_REMOVE_SCENE, remove_scene, SERVICE_REMOVE_SCENE_SCHEMA
+    )
+
+    @callback
+    async def insert_state(call: ServiceCall):
+        entity_id = call.data.get(ATTR_ENTITY_ID)
+        priority = call.data.get(ATTR_PRIORITY)
+        layer_id = call.data.get(ATTR_ID)
+        attributes = call.data.get(ATTR_ATTRIBUTES)
+
+        if entity_id in hass.data[DOMAIN][DATA_ENTITIES]:
+            hass.data[DOMAIN][DATA_STATES][entity_id][layer_id] = {
+                ATTR_PRIORITY: priority,
+                ATTR_STATE: State(entity_id, STATE_ON, attributes),
+            }
+
+            await apply_lights([entity_id], [])
+
+    hass.services.register(
+        DOMAIN, SERVICE_INSERT_STATE, insert_state, SERVICE_INSERT_STATE_SCHEMA
+    )
+
+    @callback
+    async def remove_state(call: ServiceCall):
+        entity_id = call.data.get(ATTR_ENTITY_ID)
+        layer_id = call.data.get(ATTR_ID)
+
+        if entity_id in hass.data[DOMAIN][DATA_ENTITIES]:
+            if layer_id in hass.data[DOMAIN][DATA_STATES][entity_id]:
+                hass.data[DOMAIN][DATA_STATES][entity_id].pop(layer_id)
+                await apply_lights([entity_id], [])
+
+    hass.services.register(
+        DOMAIN, SERVICE_REMOVE_STATE, remove_state, SERVICE_REMOVE_STATE_SCHEMA
     )
 
     return True

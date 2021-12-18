@@ -15,22 +15,27 @@ remove_scene:
       description: entity_id of scene to remove
       example: "scene.name_of_scene"
 
-push_state:
-  description: Set light or group state at layer.
+insert_state:
+  description: Set light state at specified layer.
   fields:
     entity_id:
-      description: entity_id of light or group
-      example: "light"
+      description: entity_id of light
+      example: "light.name_of_light"
     priority:
-      description: Layer priority of state
+      description: Layer priority
       example: "0"
-    layer_name:
+    id:
       description: Unique identifier of layer
       example: "my_layer_name"
     attributes:
+      description: State Attributes
 
-
-pop_state:
+remove_state:
   description: Remove state from layers.
   fields:
-    entity:
+    entity_id:
+      description: entity_id of light
+      example: "light.name_of_light"
+    id:
+      description: Unique identifier of layer
+      example: "my_layer_name"
