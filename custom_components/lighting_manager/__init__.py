@@ -24,15 +24,18 @@ from homeassistant.components.light import (
     ATTR_FLASH,
     LIGHT_TURN_ON_SCHEMA,
 )
-from homeassistant.components.light import DOMAIN as DOMAIN_LIGHT
-from homeassistant.components.group import DOMAIN as DOMAIN_GROUP
+
 from homeassistant import core as ha
 from homeassistant.core import Config, HomeAssistant, ServiceCall, State, callback
+from homeassistant.components.light import DOMAIN as DOMAIN_LIGHT
+from homeassistant.components.group import DOMAIN as DOMAIN_GROUP
+from homeassistant.components.sensor import DOMAIN as DOMAIN_SENSOR
+from homeassistant.components.scene import DOMAIN as DOMAIN_SCENE
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.state import async_reproduce_state
 import logging
 import voluptuous as vol
-from homeassistant.components.scene import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +51,8 @@ SERVICE_REMOVE_LAYER = "remove_layer"
 
 ATTR_PRIORITY = "priority"
 ATTR_ATTRIBUTES = "attributes"
+
+SIGNAL_LAYER_UPDATE=f"{DOMAIN}-update"
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -141,6 +146,9 @@ def setup(hass: HomeAssistant, config: Config):
             states.append(render_light(entity_id))
 
         await async_reproduce_state(hass, states)
+
+        for entity_id in entities:
+            async_dispatcher_send(hass, f"{SIGNAL_LAYER_UPDATE}-{entity_id}")
 
     @callback
     async def insert_scene(call: ServiceCall):
@@ -244,5 +252,7 @@ def setup(hass: HomeAssistant, config: Config):
     hass.services.register(
         DOMAIN, SERVICE_REMOVE_LAYER, remove_layer, SERVICE_REMOVE_LAYER_SCHEMA
     )
+
+    hass.helpers.discovery.load_platform(DOMAIN_SENSOR, DOMAIN, {}, config)
 
     return True
