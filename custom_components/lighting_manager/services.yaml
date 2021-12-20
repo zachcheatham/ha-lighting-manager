@@ -4,6 +4,9 @@ insert_scene:
     entity_id:
       description: entity_id of scene to apply
       example: "scene.name_of_scene"
+    id:
+      description: Unique identifier of layer
+      example: "my_layer_name"
     priority:
       description: Layer priority of scene (Higher the more visible)
       example: "0"

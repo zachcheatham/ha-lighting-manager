@@ -85,6 +85,7 @@ SUPPORTED_LIGHT_ATTRS = [
 SERVICE_INSERT_SCENE_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.string,
+        vol.Required(ATTR_ID): cv.string,
         vol.Required(ATTR_PRIORITY): cv.positive_int,
     }
 )
@@ -153,6 +154,7 @@ def setup(hass: HomeAssistant, config: Config):
     @callback
     async def insert_scene(call: ServiceCall):
         scene_entity_id = call.data.get(ATTR_ENTITY_ID)
+        layer_id = call.data.get(ATTR_ID)
         priority = call.data.get(ATTR_PRIORITY)
         entity_states = (
             hass.data[DATA_HA_SCENE].entities[scene_entity_id].scene_config.states
@@ -163,7 +165,7 @@ def setup(hass: HomeAssistant, config: Config):
 
         for entity_id in entity_states:
             if entity_id in hass.data[DOMAIN][DATA_STATES]:
-                hass.data[DOMAIN][DATA_STATES][entity_id][scene_entity_id] = {
+                hass.data[DOMAIN][DATA_STATES][entity_id][layer_id] = {
                     ATTR_PRIORITY: priority,
                     ATTR_STATE: entity_states[entity_id],
                 }

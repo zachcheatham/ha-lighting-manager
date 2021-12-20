@@ -28,6 +28,7 @@ Apply a scene at a specified layer. All lights managed by lighting manager and i
 | Parameter | Description |
 |-----------|-------------|
 | entity_id | Entity ID of scene to be inserted. |
+| layer_id | Layer ID. Used when removing or overriding layers.
 | priority | Layer priority. Higher values will appear before lower. |
 
 ### lighting_manager.insert_state
@@ -45,11 +46,11 @@ Apply lighting attributes to a light entity or group at a specified priority. If
 
 ### lighting_manager.remove_layer
 
-Remove a layer by id or scene by its entity id from entity id of a light or group. If not entity id is specified, layer or scene will be removed from all managed lights.
+Remove a layer by id from entity id of a light or group. If not entity id is specified, layer or scene will be removed from all managed lights.
 
 #### Service Parameters
 
 | Parameter | Description |
 |-----------|-------------|
 | entity_id | Entity ID of light or group. |
-| id | Layer ID or entity id of scene to be removed.
+| id | Layer ID to be removed.
