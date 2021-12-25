@@ -26,7 +26,7 @@ from homeassistant.components.light import (
 )
 
 from homeassistant import core as ha
-from homeassistant.core import Config, HomeAssistant, ServiceCall, State, callback
+from homeassistant.core import Config, Context, HomeAssistant, ServiceCall, State, callback
 from homeassistant.components.light import DOMAIN as DOMAIN_LIGHT
 from homeassistant.components.group import DOMAIN as DOMAIN_GROUP
 from homeassistant.components.sensor import DOMAIN as DOMAIN_SENSOR
@@ -115,16 +115,6 @@ def setup(hass: HomeAssistant, config: Config):
     for entity_id in conf[CONF_ENTITIES]:
         hass.data[DOMAIN][DATA_STATES][entity_id] = {}
 
-    def on_state_change(event):
-        state = event.data.get("new_state")
-        if (
-            ha.split_entity_id(state.entity_id)[0] == DOMAIN_LIGHT
-            and state.entity_id in hass.data[DOMAIN][DATA_ENTITIES]
-        ):
-            _LOGGER.info(state)
-
-    # hass.data[DOMAIN][DATA_EVENT_LISTENER] = hass.bus.async_listen(EVENT_STATE_CHANGED, on_state_change)
-
     def render_light(entity_id: str):
 
         if len(hass.data[DOMAIN][DATA_STATES][entity_id]) == 0:
@@ -141,12 +131,12 @@ def setup(hass: HomeAssistant, config: Config):
 
             return active_state[ATTR_STATE]
 
-    async def apply_lights(entities: List, additional_states: List):
+    async def apply_lights(entities: List, additional_states: List, context: Context):
         states = additional_states
         for entity_id in entities:
             states.append(render_light(entity_id))
 
-        await async_reproduce_state(hass, states)
+        await async_reproduce_state(hass, states, context=context)
 
         for entity_id in entities:
             async_dispatcher_send(hass, f"{SIGNAL_LAYER_UPDATE}-{entity_id}")
@@ -186,7 +176,7 @@ def setup(hass: HomeAssistant, config: Config):
             else:
                 non_managed_entities.append(ungrouped_entity_states[entity_id])
 
-        await apply_lights(affected_entities, non_managed_entities)
+        await apply_lights(affected_entities, non_managed_entities, call.context)
 
     hass.services.register(
         DOMAIN, SERVICE_INSERT_SCENE, insert_scene, SERVICE_INSERT_SCENE_SCHEMA
@@ -225,7 +215,7 @@ def setup(hass: HomeAssistant, config: Config):
         ]
 
         if len(affected_entities) > 0 or len(extra_states) > 0:
-            await apply_lights(affected_entities, extra_states)
+            await apply_lights(affected_entities, extra_states, call.context)
 
     hass.services.register(
         DOMAIN, SERVICE_INSERT_STATE, insert_state, SERVICE_INSERT_STATE_SCHEMA
@@ -262,7 +252,7 @@ def setup(hass: HomeAssistant, config: Config):
             hass.data[DOMAIN][DATA_STATES][light_entity_id].pop(layer_id)
 
         if len(affected_entities) > 0:
-            await apply_lights(affected_entities, [])
+            await apply_lights(affected_entities, [], call.context)
 
     hass.services.register(
         DOMAIN, SERVICE_REMOVE_LAYER, remove_layer, SERVICE_REMOVE_LAYER_SCHEMA
