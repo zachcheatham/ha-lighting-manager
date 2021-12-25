@@ -160,18 +160,31 @@ def setup(hass: HomeAssistant, config: Config):
             hass.data[DATA_HA_SCENE].entities[scene_entity_id].scene_config.states
         )
 
+        ungrouped_entity_states = {}
+
+        # Split out groups
+        for entity_id in entity_states:
+            if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+                for group_entity in hass.components.group.get_entity_ids(entity_id):
+                    ungrouped_entity_states[group_entity] = entity_states[entity_id]
+            else:
+                ungrouped_entity_states[entity_id] = entity_states[entity_id]
+
+        del(entity_states)
+
         non_managed_entities = []
         affected_entities = []
 
-        for entity_id in entity_states:
+        for entity_id in ungrouped_entity_states:
+
             if entity_id in hass.data[DOMAIN][DATA_STATES]:
                 hass.data[DOMAIN][DATA_STATES][entity_id][layer_id] = {
                     ATTR_PRIORITY: priority,
-                    ATTR_STATE: entity_states[entity_id],
+                    ATTR_STATE: ungrouped_entity_states[entity_id],
                 }
                 affected_entities.append(entity_id)
             else:
-                non_managed_entities.append(entity_states[entity_id])
+                non_managed_entities.append(ungrouped_entity_states[entity_id])
 
         await apply_lights(affected_entities, non_managed_entities)
 
