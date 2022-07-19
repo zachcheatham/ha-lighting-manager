@@ -10,6 +10,9 @@ insert_scene:
     priority:
       description: Layer priority of scene (Higher the more visible)
       example: "0"
+    clear_layer:
+      description: Clears all other entity states from layer before applying when true.
+      example: "true"
 
 insert_state:
   description: Set light state at specified layer.
@@ -25,6 +28,9 @@ insert_state:
       example: "my_layer_name"
     attributes:
       description: State Attributes
+    clear_layer:
+      description: Clears all other entity states from layer before applying when true.
+      example: "true"
 
 remove_layer:
   description: Remove layer or scene from all lights, a specified group, or a specified light.
@@ -35,3 +41,6 @@ remove_layer:
     id:
       description: Layer ID or entity id of scene to be removed.
       example: "my_layer_name"
+
+refresh_lights:
+  description: Refresh all managed lights to their current state.

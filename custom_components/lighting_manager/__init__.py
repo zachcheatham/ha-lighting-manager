@@ -51,6 +51,7 @@ SERVICE_REMOVE_LAYER = "remove_layer"
 
 ATTR_PRIORITY = "priority"
 ATTR_ATTRIBUTES = "attributes"
+ATTR_CLEAR_LAYER = "clear_layer"
 
 SIGNAL_LAYER_UPDATE=f"{DOMAIN}-update"
 
@@ -87,6 +88,7 @@ SERVICE_INSERT_SCENE_SCHEMA = vol.Schema(
         vol.Required(ATTR_ENTITY_ID): cv.string,
         vol.Required(ATTR_ID): cv.string,
         vol.Required(ATTR_PRIORITY): cv.positive_int,
+        vol.Optional(ATTR_CLEAR_LAYER): cv.boolean
     }
 )
 
@@ -96,6 +98,7 @@ SERVICE_INSERT_STATE_SCHEMA = vol.Schema(
         vol.Required(ATTR_PRIORITY): cv.positive_int,
         vol.Required(ATTR_ID): cv.string,
         vol.Required(ATTR_ATTRIBUTES): LIGHT_TURN_ON_SCHEMA,
+        vol.Optional(ATTR_CLEAR_LAYER): cv.boolean
     }
 )
 
@@ -141,11 +144,24 @@ def setup(hass: HomeAssistant, config: Config):
         for entity_id in entities:
             async_dispatcher_send(hass, f"{SIGNAL_LAYER_UPDATE}-{entity_id}")
 
+    def clear_layer(layer_id: str):
+        affected_entities = [
+            light_entity_id
+            for light_entity_id in hass.data[DOMAIN][DATA_ENTITIES]
+            if layer_id in hass.data[DOMAIN][DATA_STATES][light_entity_id]
+        ]
+
+        for light_entity_id in affected_entities:
+            hass.data[DOMAIN][DATA_STATES][light_entity_id].pop(layer_id)
+
+        return affected_entities
+
     @callback
     async def insert_scene(call: ServiceCall):
         scene_entity_id = call.data.get(ATTR_ENTITY_ID)
         layer_id = call.data.get(ATTR_ID)
         priority = call.data.get(ATTR_PRIORITY)
+        should_clear = call.data.get(ATTR_CLEAR_LAYER)
         entity_states = (
             hass.data[DATA_HA_SCENE].entities[scene_entity_id].scene_config.states
         )
@@ -163,7 +179,12 @@ def setup(hass: HomeAssistant, config: Config):
         del(entity_states)
 
         non_managed_entities = []
-        affected_entities = []
+        affected_entities = None
+
+        if should_clear:
+            affected_entities = clear_layer(layer_id)
+        else:
+            affected_entities = []
 
         for entity_id in ungrouped_entity_states:
 
@@ -188,9 +209,14 @@ def setup(hass: HomeAssistant, config: Config):
         priority = call.data.get(ATTR_PRIORITY)
         layer_id = call.data.get(ATTR_ID)
         attributes = call.data.get(ATTR_ATTRIBUTES)
+        should_clear = call.data.get(ATTR_CLEAR_LAYER)
 
+        affected_clear_entities = None
         affected_entities = []
         extra_entities = []
+
+        if should_clear:
+            affected_clear_entities = clear_layer(layer_id)
 
         if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
             for light_entity in hass.components.group.get_entity_ids(
@@ -213,6 +239,9 @@ def setup(hass: HomeAssistant, config: Config):
             State(extra_entity_id, STATE_ON, attributes)
             for extra_entity_id in extra_entities
         ]
+
+        if should_clear:
+            affected_entities = list(set(affected_entities + affected_clear_entities))
 
         if len(affected_entities) > 0 or len(extra_states) > 0:
             await apply_lights(affected_entities, extra_states, call.context)
