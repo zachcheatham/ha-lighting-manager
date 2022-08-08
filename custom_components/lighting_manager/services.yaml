@@ -15,17 +15,20 @@ insert_scene:
       example: "true"
 
 insert_state:
-  description: Set light state at specified layer.
+  description: Set entity state at specified layer.
   fields:
     entity_id:
-      description: entity_id of light or group
-      example: "light.name_of_light"
+      description: entity_id of entity or group
+      example: "domain.name_of_entity"
     priority:
       description: Layer priority
       example: "0"
     id:
       description: Unique identifier of layer
       example: "my_layer_name"
+    state:
+      description: Desired entity state
+      example: "on"
     attributes:
       description: State Attributes
     clear_layer:
@@ -42,5 +45,5 @@ remove_layer:
       description: Layer ID or entity id of scene to be removed.
       example: "my_layer_name"
 
-refresh_lights:
-  description: Refresh all managed lights to their current state.
+refresh_all:
+  description: Refresh all managed entities to their current state.
