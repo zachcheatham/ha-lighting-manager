@@ -6,13 +6,17 @@ from homeassistant.const import (
     CONF_ENTITIES,
     STATE_OFF,
     STATE_ON,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+    EVENT_STATE_CHANGED
 )
 
 from homeassistant import core as ha
-from homeassistant.core import Config, Context, HomeAssistant, ServiceCall, State, callback
+from homeassistant.core import Config, Context, Event, HomeAssistant, ServiceCall, State, callback
 from homeassistant.components.group import DOMAIN as DOMAIN_GROUP
 from homeassistant.components.sensor import DOMAIN as DOMAIN_SENSOR
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.state import async_reproduce_state
 import logging
@@ -288,6 +292,18 @@ def setup(hass: HomeAssistant, config: Config):
     hass.services.register(
         DOMAIN, SERVICE_REFRESH_ALL, refresh_all
     )
+
+    @callback
+    def on_state_change_event(event: Event) -> None:
+
+        old_state: State = event.data.get("old_state")
+        new_state: State = event.data.get("new_state")
+
+        if new_state and (not old_state or old_state.state == STATE_UNAVAILABLE or old_state.state == STATE_UNKNOWN) and new_state.state != STATE_UNAVAILABLE and new_state.state != STATE_UNKNOWN:
+            _LOGGER.warn("Restoring state of %s...", event.data[ATTR_ENTITY_ID])
+            apply_entities([render_entity(event.data[ATTR_ENTITY_ID])], [], event.context)
+
+    async_track_state_change_filtered(hass, TrackStates(False, hass.data[DOMAIN][DATA_ENTITIES], None), on_state_change_event)
 
     hass.helpers.discovery.load_platform(DOMAIN_SENSOR, DOMAIN, {}, config)
 
