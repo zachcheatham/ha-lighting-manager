@@ -7,8 +7,7 @@ from homeassistant.const import (
     STATE_OFF,
     STATE_ON,
     STATE_UNAVAILABLE,
-    STATE_UNKNOWN,
-    EVENT_STATE_CHANGED
+    STATE_UNKNOWN
 )
 
 from homeassistant import core as ha
@@ -286,22 +285,21 @@ def setup(hass: HomeAssistant, config: Config):
 
     @callback
     async def refresh_all(call: ServiceCall):
-        for entity_id in hass.data[DOMAIN][DATA_STATES].keys():
-            render_entity(entity_id)
+        await apply_entities(hass.data[DOMAIN][DATA_ENTITIES], [], call.context)
 
     hass.services.register(
         DOMAIN, SERVICE_REFRESH_ALL, refresh_all
     )
 
     @callback
-    def on_state_change_event(event: Event) -> None:
+    async def on_state_change_event(event: Event) -> None:
 
         old_state: State = event.data.get("old_state")
         new_state: State = event.data.get("new_state")
 
         if new_state and (not old_state or old_state.state == STATE_UNAVAILABLE or old_state.state == STATE_UNKNOWN) and new_state.state != STATE_UNAVAILABLE and new_state.state != STATE_UNKNOWN:
             _LOGGER.warn("Restoring state of %s...", event.data[ATTR_ENTITY_ID])
-            apply_entities([render_entity(event.data[ATTR_ENTITY_ID])], [], event.context)
+            await apply_entities([event.data[ATTR_ENTITY_ID]], [], event.context)
 
     async_track_state_change_filtered(hass, TrackStates(False, hass.data[DOMAIN][DATA_ENTITIES], None), on_state_change_event)
 
