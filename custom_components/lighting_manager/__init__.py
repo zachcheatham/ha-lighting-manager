@@ -34,6 +34,7 @@ SERVICE_INSERT_SCENE = "insert_scene"
 SERVICE_INSERT_STATE = "insert_state"
 SERVICE_REMOVE_LAYER = "remove_layer"
 SERVICE_REFRESH_ALL = "refresh_all"
+SERVICE_REFRESH = "refresh"
 
 ATTR_PRIORITY = "priority"
 ATTR_ATTRIBUTES = "attributes"
@@ -60,23 +61,6 @@ CONFIG_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
-# SUPPORTED_LIGHT_ATTRS = [
-#     ATTR_COLOR_MODE,
-#     ATTR_BRIGHTNESS,
-#     ATTR_BRIGHTNESS_PCT,
-#     ATTR_HS_COLOR,
-#     ATTR_RGB_COLOR,
-#     ATTR_RGBW_COLOR,
-#     ATTR_RGBWW_COLOR,
-#     ATTR_COLOR_TEMP,
-#     ATTR_EFFECT,
-#     ATTR_KELVIN,
-#     ATTR_WHITE,
-#     ATTR_WHITE_VALUE,
-#     ATTR_XY_COLOR,
-#     ATTR_FLASH,
-# ]
-
 SERVICE_INSERT_SCENE_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.string,
@@ -101,6 +85,7 @@ SERVICE_REMOVE_LAYER_SCHEMA = vol.Schema(
     {vol.Optional(ATTR_ENTITY_ID): cv.string, vol.Required(ATTR_ID): cv.string}
 )
 
+SERVICE_REFRESH_SCHEMA = vol.Schema({vol.Required(ATTR_ENTITY_ID): cv.string})
 
 def setup(hass: HomeAssistant, config: Config):
 
@@ -135,8 +120,9 @@ def setup(hass: HomeAssistant, config: Config):
 
     async def apply_entities(entities: List, additional_states: List, context: Context):
         states = additional_states
+
         for entity_id in entities:
-            states.append(render_entity(entity_id))
+            states.append(render_entity(entity_id)) 
 
         await async_reproduce_state(hass, states, context=context)
 
@@ -290,6 +276,20 @@ def setup(hass: HomeAssistant, config: Config):
     hass.services.register(
         DOMAIN, SERVICE_REFRESH_ALL, refresh_all
     )
+
+    @callback
+    async def refresh(call: ServiceCall):
+        entity_id = call.data.get(ATTR_ENTITY_ID)
+        if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+            await apply_entities([
+                group_entity
+                for group_entity in hass.components.group.get_entity_ids(entity_id)
+                if group_entity in hass.data[DOMAIN][DATA_ENTITIES]
+            ], [], call.context)
+        else:
+            await apply_entities([entity_id], [], call.context)
+
+    hass.services.register(DOMAIN, SERVICE_REFRESH, refresh, SERVICE_REFRESH_SCHEMA)
 
     @callback
     async def on_state_change_event(event: Event) -> None:
