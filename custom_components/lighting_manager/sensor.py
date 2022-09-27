@@ -1,9 +1,10 @@
-from homeassistant.core import Event, State
+from homeassistant.core import Event, State, callback
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.components.sun import STATE_ATTR_ELEVATION
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
-from . import ATTR_PRIORITY, CONF_ACTIVE_LAYER_ENTITY, DATA_ENTITIES, DATA_STATES, SIGNAL_LAYER_UPDATE
+from . import ATTR_PRIORITY, CONF_ACTIVE_LAYER_ENTITY, DATA_ENTITIES, DATA_STATES, SIGNAL_LAYER_UPDATE, CONF_ADAPTIVE, CONF_MIN_TEMP, CONF_MAX_TEMP
 import logging
 
 DOMAIN = "lighting_manager"
@@ -62,35 +63,38 @@ class AdaptiveColorTempSensor(SensorEntity):
     _attr_should_poll: bool = False
     _attr_name: str = "Adaptive Color Temp"
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _min_temp = 153
-    _max_temp = 500
     _min_elevation = 0
     _max_elevation = 15
 
-    _current_temp: int = _max_temp
+    _current_temp: int = 0
 
     async def async_added_to_hass(self) -> None:
+
+        self.recalculate_temp(self.hass.states.get("sun.sun"))
+
         self.async_on_remove(
             async_track_state_change_filtered(
                 self.hass,
                 TrackStates(False, set(["sun.sun"]), None),
-                self.recalculate_temp
+                self.recalculate_temp_from_event
             )
         )
 
-    def recalculate_temp(self, event: Event) -> None:
-        state: State = event.data.get("new_state")
+    def recalculate_temp(self, state: State) -> None:
         elevation = state.attributes[STATE_ATTR_ELEVATION]
 
         pct: float = 1.0 - (min(max(elevation, 0), 15) / 15.0)
 
-        self._current_temp = int(((self._max_temp - self._min_temp) * pct) + self._min_temp)
+        self._current_temp = int(((self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_TEMP] -
+                                 self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_TEMP]) * pct) + self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_TEMP])
 
-        _LOGGER.info("Current temp is now %d", self._current_temp)
+        self.schedule_update_ha_state()
 
-        self.schedule_update_ha_state
+
+    def recalculate_temp_from_event(self, event: Event) -> None:
+        self.recalculate_temp(event.data.get("new_state"))
+        
 
     @property
     def native_value(self) -> int:
         return self._current_temp
-

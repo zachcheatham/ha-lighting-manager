@@ -45,5 +45,25 @@ remove_layer:
       description: Layer ID or entity id of scene to be removed.
       example: "my_layer_name"
 
+refresh:
+  description: Refresh provided group or entity to current state.
+  fields:
+    entity_id:
+      description: entity_id of entity or group to be refreshed.
+      example: "light.name_of_light"
+
 refresh_all:
   description: Refresh all managed entities to their current state.
+
+add_adaptive:
+  description: Add light or group of lights to adaptive time-of-day based color temperature until it is turned off.
+  fields:
+    entity_id:
+      description: entity_id of light or group containing lights.
+
+remove_adaptive:
+  description: Remove light or group of lights from having their color temperature adjusted based on time-of-day.
+  fields:
+    entity_id:
+      description: entity_id of light or group containing lights.
+

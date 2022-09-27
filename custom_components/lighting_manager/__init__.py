@@ -14,6 +14,7 @@ from homeassistant import core as ha
 from homeassistant.core import Config, Context, Event, HomeAssistant, ServiceCall, State, callback
 from homeassistant.components.group import DOMAIN as DOMAIN_GROUP
 from homeassistant.components.sensor import DOMAIN as DOMAIN_SENSOR
+from homeassistant.components.light import DOMAIN as DOMAIN_LIGHT, ATTR_COLOR_TEMP, ATTR_COLOR_MODE, COLOR_MODE_COLOR_TEMP
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
 import homeassistant.helpers.config_validation as cv
@@ -28,21 +29,26 @@ DATA_ENTITIES = "lm_entities"
 DATA_STATES = "lm_states"
 DATA_EVENT_LISTENER = "event_listener"
 DATA_HA_SCENE = "homeassistant_scene"
-DATA_CONF = "conf"
+DATA_ADAPTIVE_ENTITIES = "adaptive_entities"
 
 SERVICE_INSERT_SCENE = "insert_scene"
 SERVICE_INSERT_STATE = "insert_state"
 SERVICE_REMOVE_LAYER = "remove_layer"
 SERVICE_REFRESH_ALL = "refresh_all"
 SERVICE_REFRESH = "refresh"
+SERVICE_ADD_ADAPTIVE = "add_adaptive"
+SERVICE_REMOVE_ADAPTIVE = "remove_adaptive"
 
 ATTR_PRIORITY = "priority"
 ATTR_ATTRIBUTES = "attributes"
 ATTR_CLEAR_LAYER = "clear_layer"
 
 CONF_ACTIVE_LAYER_ENTITY = "active_layer_entity"
+CONF_ADAPTIVE = "adaptive"
+CONF_MAX_TEMP = "max_temp"
+CONF_MIN_TEMP = "min_temp"
 
-SIGNAL_LAYER_UPDATE=f"{DOMAIN}-update"
+SIGNAL_LAYER_UPDATE = f"{DOMAIN}-update"
 
 ENTITY_SCHEMA = vol.Schema(
     {
@@ -55,6 +61,12 @@ CONFIG_SCHEMA = vol.Schema(
         DOMAIN: vol.Schema(
             {
                 vol.Required(CONF_ENTITIES): {cv.entity_id: vol.Any(None, ENTITY_SCHEMA)},
+                vol.Optional(CONF_ADAPTIVE, default={CONF_MAX_TEMP: 500, CONF_MIN_TEMP: 153}): vol.Schema(
+                    {
+                        vol.Optional(CONF_MAX_TEMP, default=500): cv.positive_int,
+                        vol.Optional(CONF_MIN_TEMP, default=153): cv.positive_int
+                    }
+                )
             }
         )
     },
@@ -87,25 +99,33 @@ SERVICE_REMOVE_LAYER_SCHEMA = vol.Schema(
 
 SERVICE_REFRESH_SCHEMA = vol.Schema({vol.Required(ATTR_ENTITY_ID): cv.string})
 
+SERVICE_ADD_ADAPTIVE_SCHEMA = vol.Schema(
+    {vol.Required(ATTR_ENTITY_ID): cv.string})
+
+SERVICE_REMOVE_ADAPTIVE_SCHEMA = vol.Schema(
+    {vol.Required(ATTR_ENTITY_ID): cv.string})
+
+
 def setup(hass: HomeAssistant, config: Config):
 
     conf = config[DOMAIN]
 
     hass.data[DOMAIN] = {}
     hass.data[DOMAIN][DATA_ENTITIES] = conf[CONF_ENTITIES]
+    hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES] = []
     hass.data[DOMAIN][DATA_STATES] = {}
+    hass.data[DOMAIN][CONF_ADAPTIVE] = {
+        CONF_MAX_TEMP: conf[CONF_ADAPTIVE][CONF_MAX_TEMP],
+        CONF_MIN_TEMP: conf[CONF_ADAPTIVE][CONF_MIN_TEMP]
+    }
+    hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]
 
     for entity_id in conf[CONF_ENTITIES].keys():
         hass.data[DOMAIN][DATA_STATES][entity_id] = {}
 
     def render_entity(entity_id: str):
-
         if len(hass.data[DOMAIN][DATA_STATES][entity_id]) == 0:
-            #domain = ha.split_entity_id(entity_id)[0]
-            #if domain == "light" or domain == "group":
             return State(entity_id, STATE_OFF)
-            #else:
-            #    return 
         else:
             active_state = None
             for layer in hass.data[DOMAIN][DATA_STATES][entity_id]:
@@ -116,13 +136,28 @@ def setup(hass: HomeAssistant, config: Config):
                 ):
                     active_state = hass.data[DOMAIN][DATA_STATES][entity_id][layer]
 
-            return active_state[ATTR_STATE]
+            if ha.split_entity_id(entity_id)[0] == DOMAIN_LIGHT and ATTR_COLOR_TEMP in active_state[ATTR_STATE].attributes and active_state[ATTR_STATE].attributes[ATTR_COLOR_TEMP] == CONF_ADAPTIVE:
+
+                # Need to recreate state thanks to the read-only attributes included in the state...
+                new_attributes = dict(active_state[ATTR_STATE].attributes)
+                new_attributes[ATTR_COLOR_TEMP] = hass.states.get(
+                    "sensor.adaptive_color_temp").state
+                new_attributes[ATTR_COLOR_MODE] = COLOR_MODE_COLOR_TEMP
+
+                add_entities_to_adaptive_track([entity_id])
+
+                return State(entity_id, active_state[ATTR_STATE].state, new_attributes)
+            else:
+                if entity_id in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
+                    remove_entities_from_adaptive_track([entity_id])
+
+                return active_state[ATTR_STATE]
 
     async def apply_entities(entities: List, additional_states: List, context: Context):
         states = additional_states
 
         for entity_id in entities:
-            states.append(render_entity(entity_id)) 
+            states.append(render_entity(entity_id))
 
         await async_reproduce_state(hass, states, context=context)
 
@@ -225,7 +260,8 @@ def setup(hass: HomeAssistant, config: Config):
         ]
 
         if should_clear:
-            affected_entities = list(set(affected_entities + affected_clear_entities))
+            affected_entities = list(
+                set(affected_entities + affected_clear_entities))
 
         if len(affected_entities) > 0 or len(extra_states) > 0:
             await apply_entities(affected_entities, extra_states, call.context)
@@ -289,7 +325,8 @@ def setup(hass: HomeAssistant, config: Config):
         else:
             await apply_entities([entity_id], [], call.context)
 
-    hass.services.register(DOMAIN, SERVICE_REFRESH, refresh, SERVICE_REFRESH_SCHEMA)
+    hass.services.register(DOMAIN, SERVICE_REFRESH,
+                           refresh, SERVICE_REFRESH_SCHEMA)
 
     @callback
     async def on_state_change_event(event: Event) -> None:
@@ -298,10 +335,96 @@ def setup(hass: HomeAssistant, config: Config):
         new_state: State = event.data.get("new_state")
 
         if new_state and (not old_state or old_state.state == STATE_UNAVAILABLE or old_state.state == STATE_UNKNOWN) and new_state.state != STATE_UNAVAILABLE and new_state.state != STATE_UNKNOWN:
-            _LOGGER.warn("Restoring state of %s...", event.data[ATTR_ENTITY_ID])
+            _LOGGER.warn("Restoring state of %s...",
+                         event.data[ATTR_ENTITY_ID])
             await apply_entities([event.data[ATTR_ENTITY_ID]], [], event.context)
 
-    async_track_state_change_filtered(hass, TrackStates(False, hass.data[DOMAIN][DATA_ENTITIES], None), on_state_change_event)
+    async_track_state_change_filtered(hass, TrackStates(
+        False, hass.data[DOMAIN][DATA_ENTITIES], None), on_state_change_event)
+
+    @callback
+    async def on_adaptive_temp_change(event: Event) -> None:
+        new_state: State = event.data.get("new_state")
+        old_state: State = event.data.get("old_state")
+
+        if new_state and old_state and new_state.state != old_state.state:
+            await update_adaptive_color(
+                hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES], event.context, new_state.state)
+
+    async_track_state_change_filtered(hass, TrackStates(
+        False, ["sensor.adaptive_color_temp"], None), on_adaptive_temp_change)
+
+    @callback
+    async def on_adaptive_light_change_event(event: Event) -> None:
+        #old_state: State = event.data.get("old_state")
+        new_state: State = event.data.get("new_state")
+
+        if new_state.state == STATE_OFF:
+            remove_entities_from_adaptive_track(
+                [event.data.get(ATTR_ENTITY_ID)])
+
+    adaptive_track_states = async_track_state_change_filtered(hass, TrackStates(
+        False, hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES], None), on_adaptive_light_change_event)
+
+    def add_entities_to_adaptive_track(entity_ids: List[str]) -> None:
+        for entity_id in entity_ids:
+            if entity_id not in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
+                hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].append(entity_id)
+
+        adaptive_track_states.async_update_listeners(TrackStates(
+            False, hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES], None))
+
+    def remove_entities_from_adaptive_track(entity_ids: List[str]) -> None:
+        for entity_ids in entity_ids:
+            if entity_id in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
+                hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].remove(entity_id)
+
+        adaptive_track_states.async_update_listeners(TrackStates(
+            False, hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES], None))
+
+    async def update_adaptive_color(entity_ids: List[str], context: Context, temp: str = None) -> None:
+        if not temp:
+            temp = hass.states.get("sensor.adaptive_color_temp").state
+
+        states = [
+            State(entity_id, STATE_ON, {ATTR_COLOR_TEMP: temp})
+            for entity_id in entity_ids
+        ]
+
+        await async_reproduce_state(hass, states, context=context)
+
+    @callback
+    async def add_adaptive(call: ServiceCall):
+        entity_id = call.data.get(ATTR_ENTITY_ID)
+        if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+
+            entities = [
+                group_entity
+                for group_entity in hass.components.group.get_entity_ids(entity_id)
+                if ha.split_entity_id(group_entity)[0] == DOMAIN_LIGHT
+            ]
+
+            await update_adaptive_color(entities, call.context)
+            add_entities_to_adaptive_track(entities)
+        else:
+            if ha.split_entity_id(entity_id)[0] == DOMAIN_LIGHT:
+                await update_adaptive_color([entity_id], call.context)
+                add_entities_to_adaptive_track([entity_id])
+
+    hass.services.register(DOMAIN, SERVICE_ADD_ADAPTIVE,
+                           add_adaptive, SERVICE_ADD_ADAPTIVE_SCHEMA)
+
+    @callback
+    async def remove_adaptive(call: ServiceCall):
+        entity_id = call.data.get(ATTR_ENTITY_ID)
+        if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+            remove_entities_from_adaptive_track(
+                hass.components.group.get_entity_ids(entity_id))
+        else:
+            remove_entities_from_adaptive_track(entity_id)
+
+    hass.services.register(DOMAIN, SERVICE_REMOVE_ADAPTIVE,
+                           remove_adaptive, SERVICE_REMOVE_ADAPTIVE_SCHEMA)
 
     hass.helpers.discovery.load_platform(DOMAIN_SENSOR, DOMAIN, {}, config)
 
