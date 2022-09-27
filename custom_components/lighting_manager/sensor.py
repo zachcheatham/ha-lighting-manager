@@ -1,10 +1,10 @@
-from homeassistant.core import Event, State, callback
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from typing import Any, Mapping
+from homeassistant.core import Event, State
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.components.sun import STATE_ATTR_ELEVATION
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
-from . import ATTR_PRIORITY, CONF_ACTIVE_LAYER_ENTITY, DATA_ENTITIES, DATA_STATES, SIGNAL_LAYER_UPDATE, CONF_ADAPTIVE, CONF_MIN_TEMP, CONF_MAX_TEMP
+from . import ATTR_PRIORITY, CONF_ACTIVE_LAYER_ENTITY, CONF_MIN_ELEVATION, CONF_MAX_ELEVATION, DATA_ENTITIES, DATA_STATES, SIGNAL_LAYER_UPDATE, CONF_ADAPTIVE, CONF_MIN_TEMP, CONF_MAX_TEMP
 import logging
 
 DOMAIN = "lighting_manager"
@@ -83,18 +83,21 @@ class AdaptiveColorTempSensor(SensorEntity):
     def recalculate_temp(self, state: State) -> None:
         elevation = state.attributes[STATE_ATTR_ELEVATION]
 
-        pct: float = 1.0 - (min(max(elevation, 0), 15) / 15.0)
+        pct: float = 1.0 - (float(min(max(elevation, self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_ELEVATION]),
+                            self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_ELEVATION])) / float(self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_ELEVATION]))
 
         self._current_temp = int(((self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_TEMP] -
                                  self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_TEMP]) * pct) + self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_TEMP])
 
         self.schedule_update_ha_state()
 
-
     def recalculate_temp_from_event(self, event: Event) -> None:
         self.recalculate_temp(event.data.get("new_state"))
-        
 
     @property
     def native_value(self) -> int:
         return self._current_temp
+        
+    @property
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+        return self.hass.data[DOMAIN][CONF_ADAPTIVE]

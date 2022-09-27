@@ -47,6 +47,8 @@ CONF_ACTIVE_LAYER_ENTITY = "active_layer_entity"
 CONF_ADAPTIVE = "adaptive"
 CONF_MAX_TEMP = "max_temp"
 CONF_MIN_TEMP = "min_temp"
+CONF_MAX_ELEVATION = "max_elevation"
+CONF_MIN_ELEVATION = "min_elevation"
 
 SIGNAL_LAYER_UPDATE = f"{DOMAIN}-update"
 
@@ -61,10 +63,12 @@ CONFIG_SCHEMA = vol.Schema(
         DOMAIN: vol.Schema(
             {
                 vol.Required(CONF_ENTITIES): {cv.entity_id: vol.Any(None, ENTITY_SCHEMA)},
-                vol.Optional(CONF_ADAPTIVE, default={CONF_MAX_TEMP: 500, CONF_MIN_TEMP: 153}): vol.Schema(
+                vol.Optional(CONF_ADAPTIVE, default={CONF_MAX_TEMP: 500, CONF_MIN_TEMP: 153, CONF_MIN_ELEVATION: 0, CONF_MAX_ELEVATION: 15}): vol.Schema(
                     {
                         vol.Optional(CONF_MAX_TEMP, default=500): cv.positive_int,
-                        vol.Optional(CONF_MIN_TEMP, default=153): cv.positive_int
+                        vol.Optional(CONF_MIN_TEMP, default=153): cv.positive_int,
+                        vol.Optional(CONF_MIN_ELEVATION, default=0): cv.positive_int,
+                        vol.Optional(CONF_MAX_ELEVATION, default=15): cv.positive_int
                     }
                 )
             }
@@ -114,10 +118,7 @@ def setup(hass: HomeAssistant, config: Config):
     hass.data[DOMAIN][DATA_ENTITIES] = conf[CONF_ENTITIES]
     hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES] = []
     hass.data[DOMAIN][DATA_STATES] = {}
-    hass.data[DOMAIN][CONF_ADAPTIVE] = {
-        CONF_MAX_TEMP: conf[CONF_ADAPTIVE][CONF_MAX_TEMP],
-        CONF_MIN_TEMP: conf[CONF_ADAPTIVE][CONF_MIN_TEMP]
-    }
+    hass.data[DOMAIN][CONF_ADAPTIVE] = conf[CONF_ADAPTIVE]
     hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]
 
     for entity_id in conf[CONF_ENTITIES].keys():
@@ -196,7 +197,7 @@ def setup(hass: HomeAssistant, config: Config):
             else:
                 ungrouped_entity_states[entity_id] = entity_states[entity_id]
 
-        del(entity_states)
+        del (entity_states)
 
         non_managed_entities = []
         affected_entities = None
@@ -364,7 +365,7 @@ def setup(hass: HomeAssistant, config: Config):
                 [event.data.get(ATTR_ENTITY_ID)])
 
     adaptive_track_states = async_track_state_change_filtered(hass, TrackStates(
-        False, hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES], None), on_adaptive_light_change_event)
+        False, set(hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]), None), on_adaptive_light_change_event)
 
     def add_entities_to_adaptive_track(entity_ids: List[str]) -> None:
         for entity_id in entity_ids:
@@ -372,7 +373,7 @@ def setup(hass: HomeAssistant, config: Config):
                 hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].append(entity_id)
 
         adaptive_track_states.async_update_listeners(TrackStates(
-            False, hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES], None))
+            False, set(hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]), None))
 
     def remove_entities_from_adaptive_track(entity_ids: List[str]) -> None:
         for entity_ids in entity_ids:
@@ -380,7 +381,7 @@ def setup(hass: HomeAssistant, config: Config):
                 hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].remove(entity_id)
 
         adaptive_track_states.async_update_listeners(TrackStates(
-            False, hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES], None))
+            False, set(hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]), None))
 
     async def update_adaptive_color(entity_ids: List[str], context: Context, temp: str = None) -> None:
         if not temp:
