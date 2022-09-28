@@ -126,6 +126,9 @@ def setup(hass: HomeAssistant, config: Config):
 
     def render_entity(entity_id: str):
         if len(hass.data[DOMAIN][DATA_STATES][entity_id]) == 0:
+            if entity_id in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
+                remove_entities_from_adaptive_track([entity_id])
+
             return State(entity_id, STATE_OFF)
         else:
             active_state = None
@@ -145,7 +148,8 @@ def setup(hass: HomeAssistant, config: Config):
                     "sensor.adaptive_color_temp").state
                 new_attributes[ATTR_COLOR_MODE] = COLOR_MODE_COLOR_TEMP
 
-                add_entities_to_adaptive_track([entity_id])
+                if not entity_id in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
+                    add_entities_to_adaptive_track([entity_id])
 
                 return State(entity_id, active_state[ATTR_STATE].state, new_attributes)
             else:
@@ -214,7 +218,8 @@ def setup(hass: HomeAssistant, config: Config):
                     ATTR_PRIORITY: priority,
                     ATTR_STATE: ungrouped_entity_states[entity_id],
                 }
-                affected_entities.append(entity_id)
+                if not entity_id in affected_entities:
+                    affected_entities.append(entity_id)
             else:
                 non_managed_entities.append(ungrouped_entity_states[entity_id])
 
@@ -357,10 +362,10 @@ def setup(hass: HomeAssistant, config: Config):
 
     @callback
     async def on_adaptive_light_change_event(event: Event) -> None:
-        #old_state: State = event.data.get("old_state")
+        old_state: State = event.data.get("old_state")
         new_state: State = event.data.get("new_state")
 
-        if new_state.state == STATE_OFF:
+        if old_state.state != new_state.state and new_state.state == STATE_OFF:
             remove_entities_from_adaptive_track(
                 [event.data.get(ATTR_ENTITY_ID)])
 
@@ -376,7 +381,7 @@ def setup(hass: HomeAssistant, config: Config):
             False, set(hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]), None))
 
     def remove_entities_from_adaptive_track(entity_ids: List[str]) -> None:
-        for entity_ids in entity_ids:
+        for entity_id in entity_ids:
             if entity_id in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
                 hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].remove(entity_id)
 
@@ -422,7 +427,7 @@ def setup(hass: HomeAssistant, config: Config):
             remove_entities_from_adaptive_track(
                 hass.components.group.get_entity_ids(entity_id))
         else:
-            remove_entities_from_adaptive_track(entity_id)
+            remove_entities_from_adaptive_track([entity_id])
 
     hass.services.register(DOMAIN, SERVICE_REMOVE_ADAPTIVE,
                            remove_adaptive, SERVICE_REMOVE_ADAPTIVE_SCHEMA)
