@@ -4,7 +4,7 @@ from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.components.sun import STATE_ATTR_ELEVATION
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
-from . import ATTR_PRIORITY, CONF_ACTIVE_LAYER_ENTITY, CONF_MIN_ELEVATION, CONF_MAX_ELEVATION, DATA_ENTITIES, DATA_STATES, SIGNAL_LAYER_UPDATE, CONF_ADAPTIVE, CONF_MIN_TEMP, CONF_MAX_TEMP
+from . import ATTR_PRIORITY, CONF_ACTIVE_LAYER_ENTITY, CONF_MIN_ELEVATION, CONF_MAX_ELEVATION, DATA_ENTITIES, DATA_STATES, SIGNAL_LAYER_UPDATE, CONF_ADAPTIVE
 import logging
 
 DOMAIN = "lighting_manager"
@@ -22,7 +22,7 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
         ]
     )
 
-    add_entities([AdaptiveColorTempSensor()])
+    add_entities([AdaptiveLightFactorSensor()])
 
 
 class ActiveLayerSensor(SensorEntity):
@@ -58,46 +58,43 @@ class ActiveLayerSensor(SensorEntity):
             return active_layer
 
 
-class AdaptiveColorTempSensor(SensorEntity):
+class AdaptiveLightFactorSensor(SensorEntity):
 
     _attr_should_poll: bool = False
-    _attr_name: str = "Adaptive Color Temp"
+    _attr_name: str = "Adaptive Lighting Factor"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _min_elevation = 0
     _max_elevation = 15
 
-    _current_temp: int = 0
+    _current_factor: int = 0
 
     async def async_added_to_hass(self) -> None:
 
-        self.recalculate_temp(self.hass.states.get("sun.sun"))
+        self.recalculate(self.hass.states.get("sun.sun"))
 
         self.async_on_remove(
             async_track_state_change_filtered(
                 self.hass,
                 TrackStates(False, set(["sun.sun"]), None),
-                self.recalculate_temp_from_event
+                self.recalculate_from_event
             )
         )
 
-    def recalculate_temp(self, state: State) -> None:
+    def recalculate(self, state: State) -> None:
         elevation = state.attributes[STATE_ATTR_ELEVATION]
 
-        pct: float = 1.0 - (float(min(max(elevation, self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_ELEVATION]),
-                            self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_ELEVATION])) / float(self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_ELEVATION]))
-
-        self._current_temp = int(((self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_TEMP] -
-                                 self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_TEMP]) * pct) + self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_TEMP])
+        self._current_factor = 1.0 - (float(min(max(elevation, self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_ELEVATION]),
+                                                self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_ELEVATION])) / float(self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_ELEVATION]))
 
         self.schedule_update_ha_state()
 
-    def recalculate_temp_from_event(self, event: Event) -> None:
-        self.recalculate_temp(event.data.get("new_state"))
+    def recalculate_from_event(self, event: Event) -> None:
+        self.recalculate(event.data.get("new_state"))
 
     @property
     def native_value(self) -> int:
-        return self._current_temp
-        
+        return self._current_factor
+
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
         return self.hass.data[DOMAIN][CONF_ADAPTIVE]
