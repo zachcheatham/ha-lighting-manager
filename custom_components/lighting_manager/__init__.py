@@ -407,14 +407,17 @@ def setup(hass: HomeAssistant, config: Config):
 
     def add_entities_to_adaptive_track(entities: List[dict]) -> None:
         for entity in entities:
-            hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES][entity_id] = entity
+            _LOGGER.debug(
+                f"Adding {entity[ATTR_ENTITY_ID]} to tracking.", )
+            hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES][entity[ATTR_ENTITY_ID]] = entity
 
         adaptive_track_states.async_update_listeners(TrackStates(
             False, set(hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].keys()), None))
 
     def remove_entities_from_adaptive_track(entity_ids: List[str]) -> None:
         for entity_id in entity_ids:
-            del hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES][entity_id]
+            if entity_id in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
+                del hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES][entity_id]
 
         adaptive_track_states.async_update_listeners(TrackStates(
             False, set(hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].keys()), None))
@@ -429,18 +432,24 @@ def setup(hass: HomeAssistant, config: Config):
         for entity in entities:
             attrs = {}
             if ATTR_COLOR_TEMP in entity and entity[ATTR_COLOR_TEMP]:
-                min_temp = hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MIN_TEMP]
-                max_temp = hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MAX_TEMP]
+                min_temp = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_MIN_TEMP]
+                max_temp = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_MAX_TEMP]
                 attrs[ATTR_COLOR_TEMP] = int(
                     ((max_temp - min_temp) * factor) + min_temp)
                 attrs[ATTR_COLOR_MODE] = COLOR_MODE_COLOR_TEMP
 
+                _LOGGER.debug(
+                    f"Updating color temperature of {entity[ATTR_ENTITY_ID]} to {attrs[ATTR_COLOR_TEMP]}.", )
+
             if ATTR_BRIGHTNESS in entity and entity[ATTR_BRIGHTNESS]:
-                min_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MIN_BRIGHTNESS]
-                max_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MAX_BRIGHTNESS]
+                min_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_MIN_BRIGHTNESS]
+                max_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_MAX_BRIGHTNESS]
 
                 attrs[ATTR_BRIGHTNESS] = int(
                     max_brightness - ((max_brightness - min_brightness) * factor))
+
+                _LOGGER.debug(
+                    f"Updating brigthness of {entity[ATTR_ENTITY_ID]} to {attrs[ATTR_BRIGHTNESS]}.", )
 
             states.append(State(entity[ATTR_ENTITY_ID], STATE_ON, attrs))
 
