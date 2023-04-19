@@ -14,7 +14,7 @@ from homeassistant import core as ha
 from homeassistant.core import Config, Context, Event, HomeAssistant, ServiceCall, State, callback
 from homeassistant.components.group import DOMAIN as DOMAIN_GROUP
 from homeassistant.components.sensor import DOMAIN as DOMAIN_SENSOR
-from homeassistant.components.light import (DOMAIN as DOMAIN_LIGHT, ATTR_COLOR_TEMP, ATTR_COLOR_MODE, 
+from homeassistant.components.light import (DOMAIN as DOMAIN_LIGHT, ATTR_COLOR_TEMP, ATTR_COLOR_MODE,
                                             COLOR_MODE_COLOR_TEMP, ATTR_BRIGHTNESS, ATTR_RGB_COLOR)
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
@@ -94,7 +94,9 @@ SERVICE_INSERT_SCENE_SCHEMA = vol.Schema(
         vol.Required(ATTR_ID): cv.string,
         vol.Required(ATTR_PRIORITY): cv.positive_int,
         vol.Optional(ATTR_CLEAR_LAYER): cv.boolean,
-        vol.Optional(ATTR_COLOR): list[int]
+        vol.Optional(ATTR_COLOR): vol.All(
+            vol.Coerce(tuple), vol.ExactSequence((cv.byte,) * 3)
+        )
     }
 )
 
@@ -139,43 +141,48 @@ def setup(hass: HomeAssistant, config: Config):
         return domain == DOMAIN_LIGHT and (
             (state.attributes.get(ATTR_COLOR_TEMP, None) == CONF_ADAPTIVE) or
             (state.attributes.get(ATTR_BRIGHTNESS, None) == CONF_ADAPTIVE))
-    
-    def state_has_replacement(domain: str, state) -> bool:
-        return domain == DOMAIN_LIGHT and (
-            state.attributes.get(ATTR_RGB_COLOR, None) == ATTR_COLOR)
 
     def insert_adaptive_values(entity_id, state_attributes) -> None:
         adaptive_factor: float = float(hass.states.get(
-                    "sensor.adaptive_lighting_factor").state)
+            "sensor.adaptive_lighting_factor").state)
 
         adaptive_track: dict = {
             ATTR_ENTITY_ID: entity_id,
             ATTR_COLOR_TEMP: state_attributes.get(ATTR_COLOR_TEMP, None) == CONF_ADAPTIVE,
-            ATTR_BRIGHTNESS: state_attributes.get(ATTR_BRIGHTNESS, None) == CONF_ADAPTIVE
+            ATTR_BRIGHTNESS: state_attributes.get(
+                ATTR_BRIGHTNESS, None) == CONF_ADAPTIVE
         }
 
         if state_attributes.get(ATTR_COLOR_TEMP, None) == CONF_ADAPTIVE:
             min_temp = hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MIN_TEMP]
             max_temp = hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MAX_TEMP]
 
-            state_attributes[ATTR_COLOR_TEMP] = int(((max_temp - min_temp) * adaptive_factor) + min_temp)
+            state_attributes[ATTR_COLOR_TEMP] = int(
+                ((max_temp - min_temp) * adaptive_factor) + min_temp)
             state_attributes[ATTR_COLOR_MODE] = COLOR_MODE_COLOR_TEMP
 
         if state_attributes.get(ATTR_BRIGHTNESS, None) == CONF_ADAPTIVE:
             min_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MIN_BRIGHTNESS]
             max_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MAX_BRIGHTNESS]
 
-            state_attributes[ATTR_BRIGHTNESS] = int(max_brightness - ((max_brightness - min_brightness) * adaptive_factor))
+            state_attributes[ATTR_BRIGHTNESS] = int(
+                max_brightness - ((max_brightness - min_brightness) * adaptive_factor))
 
-        if not entity_id in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
+        if entity_id not in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
             add_entities_to_adaptive_track([adaptive_track])
 
-    def insert_color_values(color: list[int], state_attributes: dict) -> None:
-        if state_attributes.get(ATTR_RGB_COLOR, None) == ATTR_COLOR:
-            state_attributes[ATTR_RGB_COLOR] = color
-            
+    def handle_replacements(entity_id: str, state: State, color: list | None = None) -> State:
+        domain = ha.split_entity_id(entity_id)[0]
+        if domain == DOMAIN_LIGHT and color and state.attributes.get(ATTR_RGB_COLOR, None) == ATTR_COLOR:
+            new_attributes = dict(state.attributes)
+            if domain == DOMAIN_LIGHT and color and state.attributes.get(ATTR_RGB_COLOR, None) == ATTR_COLOR:
+                new_attributes[ATTR_RGB_COLOR] = color
 
-    def render_entity(entity_id: str, extra_data):
+            return State(entity_id, state.state, new_attributes)
+        else:
+            return state
+
+    def render_entity(entity_id: str):
         if len(hass.data[DOMAIN][DATA_STATES][entity_id]) == 0:
             if entity_id in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
                 remove_entities_from_adaptive_track([entity_id])
@@ -193,32 +200,27 @@ def setup(hass: HomeAssistant, config: Config):
                 ):
                     active_state = hass.data[DOMAIN][DATA_STATES][entity_id][layer]
 
-            has_replacement = state_has_replacement(domain, active_state[ATTR_STATE])
             has_adaptive = state_has_adaptive(domain, active_state[ATTR_STATE])
 
-            if has_replacement or has_adaptive:
-
+            if has_adaptive:
                 # Need to recreate state thanks to the read-only attributes included in the state...
                 new_attributes = dict(active_state[ATTR_STATE].attributes)
 
                 if has_adaptive:
                     insert_adaptive_values(entity_id, new_attributes)
 
-                if has_replacement:
-                    insert_color_values(extra_data[ATTR_COLOR], new_attributes)
-
                 return State(entity_id, active_state[ATTR_STATE].state, new_attributes)
-            
+
             if not has_adaptive and entity_id in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
                 remove_entities_from_adaptive_track([entity_id])
 
             return active_state[ATTR_STATE]
 
-    async def apply_entities(entities: List, additional_states: List, context: Context, extra_data=None):
+    async def apply_entities(entities: List, additional_states: List, context: Context):
         states = additional_states
 
         for entity_id in entities:
-            states.append(render_entity(entity_id, extra_data))
+            states.append(render_entity(entity_id))
 
         await async_reproduce_state(hass, states, context=context)
 
@@ -243,6 +245,8 @@ def setup(hass: HomeAssistant, config: Config):
         layer_id = call.data.get(ATTR_ID)
         priority = call.data.get(ATTR_PRIORITY)
         should_clear = call.data.get(ATTR_CLEAR_LAYER)
+        color = call.data.get(ATTR_COLOR)
+
         entity_states = (
             hass.data[DATA_HA_SCENE].entities[scene_entity_id].scene_config.states
         )
@@ -253,9 +257,11 @@ def setup(hass: HomeAssistant, config: Config):
         for entity_id in entity_states:
             if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
                 for group_entity in hass.components.group.get_entity_ids(entity_id):
-                    ungrouped_entity_states[group_entity] = entity_states[entity_id]
+                    ungrouped_entity_states[group_entity] = handle_replacements(
+                        group_entity, entity_states[entity_id], color=color)
             else:
-                ungrouped_entity_states[entity_id] = entity_states[entity_id]
+                ungrouped_entity_states[entity_id] = handle_replacements(
+                    entity_id, entity_states[entity_id], color=color)
 
         del (entity_states)
 
@@ -274,14 +280,12 @@ def setup(hass: HomeAssistant, config: Config):
                     ATTR_PRIORITY: priority,
                     ATTR_STATE: ungrouped_entity_states[entity_id],
                 }
-                if not entity_id in affected_entities:
+                if entity_id not in affected_entities:
                     affected_entities.append(entity_id)
             else:
                 non_managed_entities.append(ungrouped_entity_states[entity_id])
 
-        await apply_entities(affected_entities, non_managed_entities, call.context, extra_data={
-            ATTR_COLOR: call.data.get(ATTR_COLOR)
-        })
+        await apply_entities(affected_entities, non_managed_entities, call.context)
 
     hass.services.register(
         DOMAIN, SERVICE_INSERT_SCENE, insert_scene, SERVICE_INSERT_SCENE_SCHEMA
@@ -460,8 +464,10 @@ def setup(hass: HomeAssistant, config: Config):
         for entity in entities:
             attrs = {}
             if ATTR_COLOR_TEMP in entity and entity[ATTR_COLOR_TEMP]:
-                min_temp = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_MIN_TEMP]
-                max_temp = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_MAX_TEMP]
+                min_temp = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]
+                                                            ][CONF_ADAPTIVE][CONF_MIN_TEMP]
+                max_temp = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]
+                                                            ][CONF_ADAPTIVE][CONF_MAX_TEMP]
                 attrs[ATTR_COLOR_TEMP] = int(
                     ((max_temp - min_temp) * factor) + min_temp)
                 attrs[ATTR_COLOR_MODE] = COLOR_MODE_COLOR_TEMP
@@ -470,8 +476,10 @@ def setup(hass: HomeAssistant, config: Config):
                     f"Updating color temperature of {entity[ATTR_ENTITY_ID]} to {attrs[ATTR_COLOR_TEMP]}.", )
 
             if ATTR_BRIGHTNESS in entity and entity[ATTR_BRIGHTNESS]:
-                min_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_MIN_BRIGHTNESS]
-                max_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_MAX_BRIGHTNESS]
+                min_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]
+                                                                  ][CONF_ADAPTIVE][CONF_MIN_BRIGHTNESS]
+                max_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]
+                                                                  ][CONF_ADAPTIVE][CONF_MAX_BRIGHTNESS]
 
                 attrs[ATTR_BRIGHTNESS] = int(
                     max_brightness - ((max_brightness - min_brightness) * factor))

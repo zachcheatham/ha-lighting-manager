@@ -13,6 +13,9 @@ insert_scene:
     clear_layer:
       description: Clears all other entity states from layer before applying when true.
       example: "true"
+    color:
+      description: RGB color value to fill in scene states.
+      example: "[255, 255, 0]"
 
 insert_state:
   description: Set entity state at specified layer.
