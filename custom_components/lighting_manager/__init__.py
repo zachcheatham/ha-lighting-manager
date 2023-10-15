@@ -118,7 +118,12 @@ SERVICE_REMOVE_LAYER_SCHEMA = vol.Schema(
 SERVICE_REFRESH_SCHEMA = vol.Schema({vol.Required(ATTR_ENTITY_ID): cv.string})
 
 SERVICE_ADD_ADAPTIVE_SCHEMA = vol.Schema(
-    {vol.Required(ATTR_ENTITY_ID): cv.string})
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.string,
+        vol.Optional(ATTR_BRIGHTNESS, default=True): vol.Any(cv.boolean, cv.positive_int),
+        vol.Optional(ATTR_COLOR_TEMP, default=True): cv.boolean
+    }
+)
 
 SERVICE_REMOVE_ADAPTIVE_SCHEMA = vol.Schema(
     {vol.Required(ATTR_ENTITY_ID): cv.string})
@@ -439,6 +444,10 @@ def setup(hass: HomeAssistant, config: Config):
 
     def add_entities_to_adaptive_track(entities: List[dict]) -> None:
         for entity in entities:
+
+            if ATTR_BRIGHTNESS in entity and type(entity[ATTR_BRIGHTNESS]) is int:
+                entity[ATTR_BRIGHTNESS] = False
+
             _LOGGER.debug(
                 f"Adding {entity[ATTR_ENTITY_ID]} to tracking.", )
             hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES][entity[ATTR_ENTITY_ID]] = entity
@@ -475,7 +484,7 @@ def setup(hass: HomeAssistant, config: Config):
                 _LOGGER.debug(
                     f"Updating color temperature of {entity[ATTR_ENTITY_ID]} to {attrs[ATTR_COLOR_TEMP]}.", )
 
-            if ATTR_BRIGHTNESS in entity and entity[ATTR_BRIGHTNESS]:
+            if ATTR_BRIGHTNESS in entity and entity[ATTR_BRIGHTNESS] == True:
                 min_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]
                                                                   ][CONF_ADAPTIVE][CONF_MIN_BRIGHTNESS]
                 max_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]
@@ -486,6 +495,8 @@ def setup(hass: HomeAssistant, config: Config):
 
                 _LOGGER.debug(
                     f"Updating brigthness of {entity[ATTR_ENTITY_ID]} to {attrs[ATTR_BRIGHTNESS]}.", )
+            elif ATTR_BRIGHTNESS in entity and entity[ATTR_BRIGHTNESS] != False:
+                attrs[ATTR_BRIGHTNESS] = entity[ATTR_BRIGHTNESS]
 
             states.append(State(entity[ATTR_ENTITY_ID], STATE_ON, attrs))
 
@@ -494,23 +505,26 @@ def setup(hass: HomeAssistant, config: Config):
     @callback
     async def add_adaptive(call: ServiceCall):
         entity_id = call.data.get(ATTR_ENTITY_ID)
-        if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+        brightness = call.data.get(ATTR_BRIGHTNESS)
+        color_temp = call.data.get(ATTR_COLOR_TEMP)
+        if brightness or color_temp:
+            if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
 
-            entities = [
-                {ATTR_ENTITY_ID: group_entity, ATTR_BRIGHTNESS: True,
-                    ATTR_COLOR_TEMP: True}  # TODO Make configurable
-                for group_entity in hass.components.group.get_entity_ids(entity_id)
-                if ha.split_entity_id(group_entity)[0] == DOMAIN_LIGHT
-            ]
+                entities = [
+                    {ATTR_ENTITY_ID: group_entity, ATTR_BRIGHTNESS: brightness,
+                        ATTR_COLOR_TEMP: color_temp}
+                    for group_entity in hass.components.group.get_entity_ids(entity_id)
+                    if ha.split_entity_id(group_entity)[0] == DOMAIN_LIGHT
+                ]
 
-            await update_adaptive(entities, call.context)
-            add_entities_to_adaptive_track(entities)
-        else:
-            if ha.split_entity_id(entity_id)[0] == DOMAIN_LIGHT:
-                adaptive = {ATTR_ENTITY_ID: entity_id, ATTR_BRIGHTNESS: True,
-                            ATTR_COLOR_TEMP: True}  # TODO Make configurable
-                await update_adaptive([adaptive], call.context)
-                add_entities_to_adaptive_track([adaptive])
+                await update_adaptive(entities, call.context)
+                add_entities_to_adaptive_track(entities)
+            else:
+                if ha.split_entity_id(entity_id)[0] == DOMAIN_LIGHT:
+                    adaptive = {ATTR_ENTITY_ID: entity_id, ATTR_BRIGHTNESS: brightness,
+                                ATTR_COLOR_TEMP: color_temp}
+                    await update_adaptive([adaptive], call.context)
+                    add_entities_to_adaptive_track([adaptive])
 
     hass.services.register(DOMAIN, SERVICE_ADD_ADAPTIVE,
                            add_adaptive, SERVICE_ADD_ADAPTIVE_SCHEMA)

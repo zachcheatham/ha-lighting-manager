@@ -63,6 +63,13 @@ add_adaptive:
   fields:
     entity_id:
       description: entity_id of light or group containing lights.
+      example: light.name_of_light
+    brightness:
+      description: Optional boolean indicating whether to adaptively adjust brightness or integer to indicate turn_on brightness
+      example: true
+    color_temp:
+      description: Optional boolean indicating whether to adaptively adjust color temperature
+      example: true
 
 remove_adaptive:
   description: Remove light or group of lights from having their color temperature adjusted based on time-of-day.
