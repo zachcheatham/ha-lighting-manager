@@ -15,7 +15,8 @@ from homeassistant.core import Config, Context, Event, HomeAssistant, ServiceCal
 from homeassistant.components.group import DOMAIN as DOMAIN_GROUP
 from homeassistant.components.sensor import DOMAIN as DOMAIN_SENSOR
 from homeassistant.components.light import (DOMAIN as DOMAIN_LIGHT, ATTR_COLOR_TEMP, ATTR_COLOR_MODE,
-                                            COLOR_MODE_COLOR_TEMP, ATTR_BRIGHTNESS, ATTR_RGB_COLOR)
+                                            COLOR_MODE_COLOR_TEMP, ATTR_BRIGHTNESS, ATTR_RGB_COLOR,
+                                            ATTR_EFFECT)
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
 import homeassistant.helpers.config_validation as cv
@@ -178,9 +179,14 @@ def setup(hass: HomeAssistant, config: Config):
 
     def handle_replacements(entity_id: str, state: State, color: list | None = None) -> State:
         domain = ha.split_entity_id(entity_id)[0]
-        if domain == DOMAIN_LIGHT and color and state.attributes.get(ATTR_RGB_COLOR, None) == ATTR_COLOR:
+        if domain == DOMAIN_LIGHT:
             new_attributes = dict(state.attributes)
-            if domain == DOMAIN_LIGHT and color and state.attributes.get(ATTR_RGB_COLOR, None) == ATTR_COLOR:
+
+            # Also default to no effect if not specified.
+            if ATTR_EFFECT not in state.attributes:
+                new_attributes[ATTR_EFFECT] = "None"
+
+            if color and state.attributes.get(ATTR_RGB_COLOR, None) == ATTR_COLOR:
                 new_attributes[ATTR_RGB_COLOR] = color
 
             return State(entity_id, state.state, new_attributes)
@@ -322,9 +328,15 @@ def setup(hass: HomeAssistant, config: Config):
             affected_entities.append(entity_id)
 
         for entity in affected_entities:
+
+            # Force Effect to None if not specified
+            overwrite_attributes = dict(attributes)
+            if ha.split_entity_id(entity_id)[0] == DOMAIN_LIGHT and ATTR_EFFECT not in overwrite_attributes:
+                overwrite_attributes[ATTR_EFFECT] = "None"
+
             hass.data[DOMAIN][DATA_STATES][entity][layer_id] = {
                 ATTR_PRIORITY: priority,
-                ATTR_STATE: State(entity_id, state, attributes),
+                ATTR_STATE: State(entity_id, state, overwrite_attributes),
             }
 
         extra_states = [
