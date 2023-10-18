@@ -61,10 +61,10 @@ SIGNAL_LAYER_UPDATE = f"{DOMAIN}-update"
 ENTITY_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_ACTIVE_LAYER_ENTITY, default=False): cv.boolean,
-        vol.Optional(CONF_ADAPTIVE, default={CONF_MAX_TEMP: 500, CONF_MIN_TEMP: 153, CONF_MIN_BRIGHTNESS: 155, CONF_MAX_BRIGHTNESS: 255}): vol.Schema(
+        vol.Optional(CONF_ADAPTIVE, default={CONF_MAX_TEMP: None, CONF_MIN_TEMP: None, CONF_MIN_BRIGHTNESS: 155, CONF_MAX_BRIGHTNESS: 255}): vol.Schema(
             {
-                vol.Optional(CONF_MAX_TEMP, default=500): cv.positive_int,
-                vol.Optional(CONF_MIN_TEMP, default=153): cv.positive_int,
+                vol.Optional(CONF_MAX_TEMP): cv.positive_int,
+                vol.Optional(CONF_MIN_TEMP): cv.positive_int,
                 vol.Optional(CONF_MAX_BRIGHTNESS, default=255): cv.positive_int,
                 vol.Optional(CONF_MIN_BRIGHTNESS, default=150): cv.positive_int
             }
@@ -77,10 +77,14 @@ CONFIG_SCHEMA = vol.Schema(
         DOMAIN: vol.Schema(
             {
                 vol.Required(CONF_ENTITIES): {cv.entity_id: vol.Any(None, ENTITY_SCHEMA)},
-                vol.Optional(CONF_ADAPTIVE, default={CONF_MIN_ELEVATION: 0, CONF_MAX_ELEVATION: 15}): vol.Schema(
+                vol.Optional(CONF_ADAPTIVE, default={
+                        CONF_MIN_ELEVATION: 0, CONF_MAX_ELEVATION: 15, CONF_MIN_TEMP: 153, CONF_MAX_TEMP: 333
+                    }): vol.Schema(
                     {
                         vol.Optional(CONF_MIN_ELEVATION, default=0): cv.positive_int,
-                        vol.Optional(CONF_MAX_ELEVATION, default=15): cv.positive_int
+                        vol.Optional(CONF_MAX_ELEVATION, default=15): cv.positive_int,
+                        vol.Optional(CONF_MIN_TEMP, default=153): cv.positive_int,
+                        vol.Optional(CONF_MAX_TEMP, default=333): cv.positive_int
                     }
                 )
             }
@@ -160,8 +164,10 @@ def setup(hass: HomeAssistant, config: Config):
         }
 
         if state_attributes.get(ATTR_COLOR_TEMP, None) == CONF_ADAPTIVE:
-            min_temp = hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MIN_TEMP]
-            max_temp = hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MAX_TEMP]
+            min_temp = (hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MIN_TEMP] or
+                        hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_TEMP])
+            max_temp = (hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_MAX_TEMP] or
+                        hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_TEMP])
 
             state_attributes[ATTR_COLOR_TEMP] = int(
                 ((max_temp - min_temp) * adaptive_factor) + min_temp)
@@ -485,10 +491,10 @@ def setup(hass: HomeAssistant, config: Config):
         for entity in entities:
             attrs = {}
             if ATTR_COLOR_TEMP in entity and entity[ATTR_COLOR_TEMP]:
-                min_temp = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]
-                                                            ][CONF_ADAPTIVE][CONF_MIN_TEMP]
-                max_temp = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]
-                                                            ][CONF_ADAPTIVE][CONF_MAX_TEMP]
+                min_temp = (hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_MIN_TEMP]
+                            or hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_TEMP])
+                max_temp = (hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_MAX_TEMP]
+                            or hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_TEMP])
                 attrs[ATTR_COLOR_TEMP] = int(
                     ((max_temp - min_temp) * factor) + min_temp)
                 attrs[ATTR_COLOR_MODE] = COLOR_MODE_COLOR_TEMP
