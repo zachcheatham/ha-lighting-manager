@@ -14,8 +14,8 @@ from homeassistant import core as ha
 from homeassistant.core import Config, Context, Event, HomeAssistant, ServiceCall, State, callback
 from homeassistant.components.group import DOMAIN as DOMAIN_GROUP
 from homeassistant.components.sensor import DOMAIN as DOMAIN_SENSOR
-from homeassistant.components.light import (DOMAIN as DOMAIN_LIGHT, ATTR_COLOR_TEMP, ATTR_COLOR_MODE,
-                                            COLOR_MODE_COLOR_TEMP, ATTR_BRIGHTNESS, ATTR_RGB_COLOR,
+from homeassistant.components.light import (DOMAIN as DOMAIN_LIGHT, ATTR_COLOR_TEMP, ATTR_COLOR_TEMP_KELVIN, ATTR_COLOR_MODE,
+                                            COLOR_MODE_COLOR_TEMP, ATTR_BRIGHTNESS, ATTR_RGB_COLOR, ATTR_RGBW_COLOR,
                                             ATTR_EFFECT)
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
@@ -63,8 +63,8 @@ ENTITY_SCHEMA = vol.Schema(
         vol.Optional(CONF_ACTIVE_LAYER_ENTITY, default=False): cv.boolean,
         vol.Optional(CONF_ADAPTIVE, default={CONF_MAX_TEMP: None, CONF_MIN_TEMP: None, CONF_MIN_BRIGHTNESS: 155, CONF_MAX_BRIGHTNESS: 255}): vol.Schema(
             {
-                vol.Optional(CONF_MAX_TEMP): cv.positive_int,
-                vol.Optional(CONF_MIN_TEMP): cv.positive_int,
+                vol.Optional(CONF_MAX_TEMP, default=None): vol.Any(None, cv.positive_int),
+                vol.Optional(CONF_MIN_TEMP, default=None): vol.Any(None, cv.positive_int),
                 vol.Optional(CONF_MAX_BRIGHTNESS, default=255): cv.positive_int,
                 vol.Optional(CONF_MIN_BRIGHTNESS, default=150): cv.positive_int
             }
@@ -99,9 +99,7 @@ SERVICE_INSERT_SCENE_SCHEMA = vol.Schema(
         vol.Required(ATTR_ID): cv.string,
         vol.Required(ATTR_PRIORITY): cv.positive_int,
         vol.Optional(ATTR_CLEAR_LAYER): cv.boolean,
-        vol.Optional(ATTR_COLOR): vol.All(
-            vol.Coerce(tuple), vol.ExactSequence((cv.byte,) * 3)
-        )
+        vol.Optional(ATTR_COLOR):  vol.Coerce(tuple)
     }
 )
 
@@ -194,6 +192,8 @@ def setup(hass: HomeAssistant, config: Config):
 
             if color and state.attributes.get(ATTR_RGB_COLOR, None) == ATTR_COLOR:
                 new_attributes[ATTR_RGB_COLOR] = color
+            elif color and state.attributes.get(ATTR_RGBW_COLOR, None) == ATTR_COLOR:
+                new_attributes[ATTR_RGBW_COLOR] = color
 
             return State(entity_id, state.state, new_attributes)
         else:
@@ -512,7 +512,7 @@ def setup(hass: HomeAssistant, config: Config):
                     max_brightness - ((max_brightness - min_brightness) * factor))
 
                 _LOGGER.debug(
-                    f"Updating brigthness of {entity[ATTR_ENTITY_ID]} to {attrs[ATTR_BRIGHTNESS]}.", )
+                    f"Updating brightness of {entity[ATTR_ENTITY_ID]} to {attrs[ATTR_BRIGHTNESS]}.", )
             elif ATTR_BRIGHTNESS in entity and entity[ATTR_BRIGHTNESS] != False:
                 attrs[ATTR_BRIGHTNESS] = entity[ATTR_BRIGHTNESS]
 
