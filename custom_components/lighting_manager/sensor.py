@@ -1,7 +1,6 @@
 from typing import Any, Mapping
 from homeassistant.core import Event, State
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
-from homeassistant.components.sun import STATE_ATTR_ELEVATION
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
 from . import ATTR_PRIORITY, CONF_ACTIVE_LAYER_ENTITY, CONF_MIN_ELEVATION, CONF_MAX_ELEVATION, DATA_ENTITIES, DATA_STATES, SIGNAL_LAYER_UPDATE, CONF_ADAPTIVE
@@ -81,7 +80,7 @@ class AdaptiveLightFactorSensor(SensorEntity):
         )
 
     def recalculate(self, state: State) -> None:
-        elevation = state.attributes[STATE_ATTR_ELEVATION]
+        elevation = state.attributes["elevation"] # TODO IMPORT ATTR CONST
 
         self._current_factor = 1.0 - (float(min(max(elevation, self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_ELEVATION]),
                                                 self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_ELEVATION])) / float(self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_ELEVATION]))
