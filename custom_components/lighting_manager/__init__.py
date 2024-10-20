@@ -66,12 +66,15 @@ ENTITY_SCHEMA = vol.Schema(
         vol.Optional(CONF_ACTIVE_LAYER_ENTITY, default=False): cv.boolean,
         vol.Optional(CONF_ADAPTIVE, default={CONF_MAX_TEMP: None, CONF_MIN_TEMP: None,
                                              CONF_MIN_BRIGHTNESS: 155, CONF_MAX_BRIGHTNESS: 255,
+                                             CONF_INPUT_BRIGHTNESS_MAX: None, CONF_INPUT_BRIGHTNESS_MIN: None,
                                              CONF_BRIGHTNESS_MODE_SUN: True}): vol.Schema(
             {
                 vol.Optional(CONF_MAX_TEMP, default=None): vol.Any(None, cv.positive_int),
                 vol.Optional(CONF_MIN_TEMP, default=None): vol.Any(None, cv.positive_int),
                 vol.Optional(CONF_MAX_BRIGHTNESS, default=255): cv.positive_int,
                 vol.Optional(CONF_MIN_BRIGHTNESS, default=150): cv.positive_int,
+                vol.Optional(CONF_INPUT_BRIGHTNESS_MIN, default=None): vol.Any(None, cv.positive_int),
+                vol.Optional(CONF_INPUT_BRIGHTNESS_MAX, default=None): vol.Any(None, cv.positive_int),
                 vol.Optional(CONF_BRIGHTNESS_MODE_SUN, default=True): cv.boolean
             }
         )
@@ -168,8 +171,8 @@ def setup(hass: HomeAssistant, config: Config):
             not hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE][CONF_BRIGHTNESS_MODE_SUN]):
 
             brightness_current = float(hass.states.get(hass.data[DOMAIN][CONF_ADAPTIVE][CONF_BRIGHTNESS_ENTITY_ID]).state)
-            brightness_input_min = float(hass.data[DOMAIN][CONF_ADAPTIVE][CONF_INPUT_BRIGHTNESS_MIN])
-            brightness_input_max = float(hass.data[DOMAIN][CONF_ADAPTIVE][CONF_INPUT_BRIGHTNESS_MAX])
+            brightness_input_min = float(hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE].get(CONF_INPUT_BRIGHTNESS_MIN) or hass.data[DOMAIN][CONF_ADAPTIVE][CONF_INPUT_BRIGHTNESS_MIN])
+            brightness_input_max = float(hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE].get(CONF_INPUT_BRIGHTNESS_MAX) or hass.data[DOMAIN][CONF_ADAPTIVE][CONF_INPUT_BRIGHTNESS_MAX])
             brightness_adaptive_factor = 1.0 - (float(min(max(brightness_current, brightness_input_min), brightness_input_max)) / float(brightness_input_max))
 
         adaptive_track: dict = {
@@ -196,8 +199,6 @@ def setup(hass: HomeAssistant, config: Config):
             state_attributes[ATTR_BRIGHTNESS] = int(
                 max_brightness - ((max_brightness - min_brightness) * brightness_adaptive_factor))
         
-            _LOGGER.debug("Brightness set to %d", state_attributes[ATTR_BRIGHTNESS])
-
         if entity_id not in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
             add_entities_to_adaptive_track([adaptive_track])
 
@@ -519,8 +520,6 @@ def setup(hass: HomeAssistant, config: Config):
                 "sensor.adaptive_lighting_factor").state)
         
         brightness_input_current = float(hass.states.get(hass.data[DOMAIN][CONF_ADAPTIVE][CONF_BRIGHTNESS_ENTITY_ID]).state)
-        brightness_input_min = float(hass.data[DOMAIN][CONF_ADAPTIVE][CONF_INPUT_BRIGHTNESS_MIN])
-        brightness_input_max = float(hass.data[DOMAIN][CONF_ADAPTIVE][CONF_INPUT_BRIGHTNESS_MAX])
 
         states = []
 
@@ -535,15 +534,16 @@ def setup(hass: HomeAssistant, config: Config):
                     ((max_temp - min_temp) * factor) + min_temp)
                 attrs[ATTR_COLOR_MODE] = COLOR_MODE_COLOR_TEMP
 
-                _LOGGER.debug(
-                    f"Updating color temperature of {entity[ATTR_ENTITY_ID]} to {attrs[ATTR_COLOR_TEMP]}.", )
-
             if ATTR_BRIGHTNESS in entity and entity[ATTR_BRIGHTNESS] == True:
 
                 brightness_factor: float = factor
-                if (hass.data[DOMAIN][CONF_ADAPTIVE][CONF_BRIGHTNESS_ENTITY_ID] is not None and
-                    not hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_BRIGHTNESS_MODE_SUN]):
-                    
+                if (hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_BRIGHTNESS_MODE_SUN]):
+
+                    brightness_input_min = float(hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE].get(CONF_INPUT_BRIGHTNESS_MIN)
+                                                 or hass.data[DOMAIN][CONF_ADAPTIVE][CONF_INPUT_BRIGHTNESS_MIN])
+                    brightness_input_max = float(hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE].get(CONF_INPUT_BRIGHTNESS_MAX)
+                                                 or hass.data[DOMAIN][CONF_ADAPTIVE][CONF_INPUT_BRIGHTNESS_MAX])
+                                        
                     brightness_factor = 1.0 - (float(min(max(brightness_input_current, brightness_input_min), brightness_input_max)) / float(brightness_input_max))
 
 
