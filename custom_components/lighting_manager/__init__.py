@@ -537,7 +537,7 @@ def setup(hass: HomeAssistant, config: Config):
             if ATTR_BRIGHTNESS in entity and entity[ATTR_BRIGHTNESS] == True:
 
                 brightness_factor: float = factor
-                if (hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_BRIGHTNESS_MODE_SUN]):
+                if (not hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE][CONF_BRIGHTNESS_MODE_SUN]):
 
                     brightness_input_min = float(hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]][CONF_ADAPTIVE].get(CONF_INPUT_BRIGHTNESS_MIN)
                                                  or hass.data[DOMAIN][CONF_ADAPTIVE][CONF_INPUT_BRIGHTNESS_MIN])
@@ -545,7 +545,6 @@ def setup(hass: HomeAssistant, config: Config):
                                                  or hass.data[DOMAIN][CONF_ADAPTIVE][CONF_INPUT_BRIGHTNESS_MAX])
                                         
                     brightness_factor = 1.0 - (float(min(max(brightness_input_current, brightness_input_min), brightness_input_max)) / float(brightness_input_max))
-
 
                 min_brightness = hass.data[DOMAIN][DATA_ENTITIES][entity[ATTR_ENTITY_ID]
                                                                   ][CONF_ADAPTIVE][CONF_MIN_BRIGHTNESS]
