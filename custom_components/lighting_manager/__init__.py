@@ -212,8 +212,12 @@ def setup(hass: HomeAssistant, config: Config):
                 new_attributes[ATTR_EFFECT] = "None"
 
             if color and state.attributes.get(ATTR_RGB_COLOR, None) == ATTR_COLOR:
+                if len(color) == 4:
+                    color.pop(3)
                 new_attributes[ATTR_RGB_COLOR] = color
             elif color and state.attributes.get(ATTR_RGBW_COLOR, None) == ATTR_COLOR:
+                if len(color) == 3:
+                    color.append(0)
                 new_attributes[ATTR_RGBW_COLOR] = color
 
             return State(entity_id, state.state, new_attributes)
