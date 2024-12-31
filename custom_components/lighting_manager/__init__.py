@@ -592,7 +592,7 @@ def setup(hass: HomeAssistant, config: Config):
                     add_entities_to_adaptive_track([adaptive])
 
     hass.services.register(DOMAIN, SERVICE_ADD_ADAPTIVE,
-                           add_adaptive, SERVICE_ADD_ADAPTIVE_SCHEMA)
+                           add_adaptive, cv.make_entity_service_schema(SERVICE_ADD_ADAPTIVE_SCHEMA))
 
     @callback
     async def remove_adaptive(call: ServiceCall):
