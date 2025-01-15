@@ -49,12 +49,12 @@ ATTR_CLEAR_LAYER = "clear_layer"
 ATTR_COLOR = "color"
 
 CONF_ADAPTIVE = "adaptive"
-CONF_MAX_COLOR_TEMP = "max_color_temp"
-CONF_MIN_COLOR_TEMP = "min_color_temp"
-CONF_MAX_BRIGHTNESS = "max_brightness"
-CONF_MIN_BRIGHTNESS = "min_brightness"
-CONF_MAX_ELEVATION = "max_elevation"
-CONF_MIN_ELEVATION = "min_elevation"
+CONF_MAX_COLOR_TEMP = "color_temp_max"
+CONF_MIN_COLOR_TEMP = "color_temp_min"
+CONF_MAX_BRIGHTNESS = "brightness_max"
+CONF_MIN_BRIGHTNESS = "brightness_min"
+CONF_MAX_ELEVATION = "elevation_max"
+CONF_MIN_ELEVATION = "elevation_min"
 CONF_ADAPTIVE_INPUT_ENTITIES = "adaptive_input_entities"
 CONF_INPUT_BRIGHTNESS_MAX = "input_brightness_max"
 CONF_INPUT_BRIGHTNESS_MIN = "input_brightness_min"
@@ -85,16 +85,17 @@ CONFIG_SCHEMA = vol.Schema(
     {
         DOMAIN: vol.Schema(
             {
-                vol.Required(CONF_ENTITIES): {cv.entity_id: vol.Any(None, ENTITY_SCHEMA)},
+                vol.Required(CONF_ENTITIES, default={}): {cv.entity_id: vol.Coerce(lambda x: ENTITY_SCHEMA(x or {}))},
                 vol.Optional(CONF_ADAPTIVE, default={CONF_MIN_ELEVATION: 0, CONF_MAX_ELEVATION: 15, CONF_MIN_COLOR_TEMP: 153,
-                                                     CONF_MAX_COLOR_TEMP: 333, CONF_ADAPTIVE_INPUT_ENTITIES: None,
+                                                     CONF_MAX_COLOR_TEMP: 333, CONF_ADAPTIVE_INPUT_ENTITIES: [],
                                                      CONF_INPUT_BRIGHTNESS_MAX: 255, CONF_INPUT_BRIGHTNESS_MIN: 0}): vol.Schema(
                     {
                         vol.Optional(CONF_MIN_ELEVATION, default=0): cv.positive_int,
                         vol.Optional(CONF_MAX_ELEVATION, default=15): cv.positive_int,
                         vol.Optional(CONF_MIN_COLOR_TEMP, default=153): cv.positive_int,
                         vol.Optional(CONF_MAX_COLOR_TEMP, default=333): cv.positive_int,
-                        vol.Optional(CONF_ADAPTIVE_INPUT_ENTITIES, default=None): vol.Any(None, [cv.string]),
+                        vol.Optional(CONF_INPUT_BRIGHTNESS_ENTITY, default=None): vol.Any(None, cv.string),
+                        vol.Optional(CONF_ADAPTIVE_INPUT_ENTITIES, default=[]): vol.Any(None, [cv.string]),
                         vol.Optional(CONF_INPUT_BRIGHTNESS_MAX, default=255): int,
                         vol.Optional(CONF_INPUT_BRIGHTNESS_MIN, default=0):int
                     }
@@ -213,8 +214,8 @@ def setup(hass: HomeAssistant, config: Config):
             has_adaptive = state_has_adaptive(domain, active_state[ATTR_STATE])
 
             if has_adaptive:
-                
-                new_attributes = dict(active_state[ATTR_STATE].attributes) # Need to recreate state thanks to the read-only attributes included in the state...              
+
+                new_attributes = dict(active_state[ATTR_STATE].attributes) # Need to recreate state thanks to the read-only attributes included in the state...
 
                 color_temp_enabled = False
                 color_temp_min = None
@@ -230,40 +231,46 @@ def setup(hass: HomeAssistant, config: Config):
                     brightness_enabled = True
 
                     for item in str(new_attributes.get(ATTR_BRIGHTNESS, "")).split(";"):
-                        k,v = item.split("=")
+                        if '=' in item:
+                            k,v = item.split("=", 2)
 
-                        if k == CONF_INPUT_BRIGHTNESS_MAX:
-                            brightness_input_max = int(v)
-                        elif k == CONF_INPUT_BRIGHTNESS_MIN:
-                            brightness_input_min = int(v)
-                        elif k == CONF_INPUT_BRIGHTNESS_ENTITY:
-                            brightness_input_entity = v
-                        elif k == CONF_MAX_BRIGHTNESS:
-                            brightness_max = int(v)
-                        elif k == CONF_MIN_BRIGHTNESS:
-                            brightness_min = int(v)      
+                            if k == CONF_INPUT_BRIGHTNESS_MAX:
+                                brightness_input_max = int(v)
+                            elif k == CONF_INPUT_BRIGHTNESS_MIN:
+                                brightness_input_min = int(v)
+                            elif k == CONF_INPUT_BRIGHTNESS_ENTITY:
+                                brightness_input_entity = v
+                            elif k == CONF_MAX_BRIGHTNESS:
+                                brightness_max = int(v)
+                            elif k == CONF_MIN_BRIGHTNESS:
+                                brightness_min = int(v)
+                            else:
+                                _LOGGER.warning("Unknown adaptive brightness configuration in %s state: '%s' = '%s'", entity_id, k, v)
 
                 if str(new_attributes.get(ATTR_COLOR_TEMP, "")).startswith(CONF_ADAPTIVE):
                     color_temp_enabled = True
                     for item in str(new_attributes.get(ATTR_COLOR_TEMP, "")).split(";"):
-                        k,v = item.split("=")
+                        if '=' in item:
+                            k,v = item.split("=", 1)
 
-                        if k == CONF_MIN_COLOR_TEMP:
-                            color_temp_min = v
-                        elif k == CONF_MAX_COLOR_TEMP:
-                            color_temp_max = v
+                            if k == CONF_MIN_COLOR_TEMP:
+                                color_temp_min = v
+                            elif k == CONF_MAX_COLOR_TEMP:
+                                color_temp_max = v
+                            else:
+                                _LOGGER.warning("Unknown adaptive color_temp configuration in %s state: '%s' = '%s'", entity_id, k, v)
 
                 create_adaptive_track(entity_id, new_attributes, AdaptiveProperties(
                     entity_id,
                     brightness_enabled,
                     color_temp_enabled,
                     brightness_input_entity,
-                    brightness_input_max,
                     brightness_input_min,
+                    brightness_input_max,
                     brightness_min,
                     brightness_max,
                     color_temp_min,
-                    color_temp_max                    
+                    color_temp_max
                 ))
 
                 return State(entity_id, active_state[ATTR_STATE].state, new_attributes)
@@ -462,11 +469,11 @@ def setup(hass: HomeAssistant, config: Config):
     @callback
     async def on_state_change_event(event: Event) -> None:
 
-        old_state: State = event.data.get("old_state")
-        new_state: State = event.data.get("new_state")
+        old_state: State = event.data.get("old_state", STATE_UNAVAILABLE)
+        new_state: State = event.data.get("new_state", STATE_UNAVAILABLE)
 
         if new_state and (not old_state or old_state.state == STATE_UNAVAILABLE or old_state.state == STATE_UNKNOWN) and new_state.state != STATE_UNAVAILABLE and new_state.state != STATE_UNKNOWN:
-            _LOGGER.warn("Restoring state of %s...",
+            _LOGGER.warning("Restoring state of %s...",
                          event.data[ATTR_ENTITY_ID])
             await apply_entities([event.data[ATTR_ENTITY_ID]], [], event.context)
 
@@ -478,16 +485,13 @@ def setup(hass: HomeAssistant, config: Config):
         new_state: State = event.data.get("new_state")
         old_state: State = event.data.get("old_state")
 
-        adaptive_factor: float = float(hass.states.get(
-            "sensor.adaptive_lighting_factor").state)
-
         if new_state and old_state and new_state.state != old_state.state:
             await update_adaptive(
-                hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].values(), event.context, adaptive_factor)
+                hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].values(), event.context, "sun")
 
     async_track_state_change_filtered(hass, TrackStates(
         False, ["sensor.adaptive_lighting_factor"], None), on_adaptive_factor_change)
-    
+
     # Register listener for all adaptive brightness inputs
     if hass.data[DOMAIN][CONF_ADAPTIVE][CONF_ADAPTIVE_INPUT_ENTITIES] is not None:
         @callback
@@ -497,7 +501,7 @@ def setup(hass: HomeAssistant, config: Config):
             old_state: State = event.data.get("old_state")
 
             if new_state and old_state and new_state.state != old_state.state:
-                await update_adaptive(hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].values(), event.context, input_entity_id=entity_id)
+                await update_adaptive(hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].values(), event.context, entity_id)
 
         async_track_state_change_filtered(hass, TrackStates(
             False, hass.data[DOMAIN][CONF_ADAPTIVE][CONF_ADAPTIVE_INPUT_ENTITIES], None), on_input_brightness_change)
@@ -513,7 +517,7 @@ def setup(hass: HomeAssistant, config: Config):
                 [event.data.get(ATTR_ENTITY_ID)])
 
     adaptive_track_states = async_track_state_change_filtered(hass, TrackStates(
-        False, set(hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]), None), on_adaptive_light_change_event)
+        False, set(hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES].keys()), None), on_adaptive_light_change_event)
 
     def add_entity_to_adaptive_track(properties: AdaptiveProperties) -> None:
         hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES][properties.entity_id] = properties
@@ -538,23 +542,23 @@ def setup(hass: HomeAssistant, config: Config):
             (isinstance(color_temp, str) and color_temp.startswith(CONF_ADAPTIVE)))
 
 
-    def create_adaptive_track(entity_id, state_attributes, adaptive_properties: AdaptiveProperties) -> None:        
+    def create_adaptive_track(entity_id, state_attributes, adaptive_properties: AdaptiveProperties) -> None:
         adaptive_config = hass.data[DOMAIN][CONF_ADAPTIVE]
         entity_adaptive_config = hass.data[DOMAIN][DATA_ENTITIES][entity_id][CONF_ADAPTIVE]
 
-        input_brightness_entity = adaptive_properties.brightness_entity_id or entity_adaptive_config[CONF_INPUT_BRIGHTNESS_ENTITY] or adaptive_config[CONF_INPUT_BRIGHTNESS_ENTITY]
+        input_brightness_entity = adaptive_properties.brightness_input_entity_id or entity_adaptive_config[CONF_INPUT_BRIGHTNESS_ENTITY] or adaptive_config[CONF_INPUT_BRIGHTNESS_ENTITY]
         input_brightness_min = adaptive_properties.brightness_input_min or entity_adaptive_config[CONF_INPUT_BRIGHTNESS_MIN] or adaptive_config[CONF_INPUT_BRIGHTNESS_MIN]
         input_brightness_max = adaptive_properties.brightness_input_max or entity_adaptive_config[CONF_INPUT_BRIGHTNESS_MAX] or adaptive_config[CONF_INPUT_BRIGHTNESS_MAX]
         brightness_min = adaptive_properties.brightness_min or entity_adaptive_config[CONF_MIN_BRIGHTNESS]
         brightness_max = adaptive_properties.brightness_max or entity_adaptive_config[CONF_MAX_BRIGHTNESS]
-        color_temp_min = adaptive_properties.color_temp_min or entity_adaptive_config[CONF_MIN_COLOR_TEMP]
-        color_temp_max = adaptive_properties.color_temp_max or entity_adaptive_config[CONF_MAX_COLOR_TEMP]
+        color_temp_min = adaptive_properties.color_temp_min or entity_adaptive_config[CONF_MIN_COLOR_TEMP] or adaptive_config[CONF_MIN_COLOR_TEMP]
+        color_temp_max = adaptive_properties.color_temp_max or entity_adaptive_config[CONF_MAX_COLOR_TEMP] or adaptive_config[CONF_MAX_COLOR_TEMP]
 
         if brightness_min is None or brightness_max is None:
-            _LOGGER.warning("{} does not specify min or max brightnesses. Cannot set adaptive brightness!", entity_id)
+            _LOGGER.warninging("%s does not specify min or max brightnesses. Cannot set adaptive brightness!", entity_id)
 
         if color_temp_min is None or color_temp_max is None:
-            _LOGGER.warning("{} does not specify min or max temperatures. Cannot set adaptive temp!", entity_id)
+            _LOGGER.warninging("%s does not specify min or max temperatures. Cannot set adaptive temp!", entity_id)
 
         adaptive_track_properties = AdaptiveProperties(
             entity_id,
@@ -567,43 +571,52 @@ def setup(hass: HomeAssistant, config: Config):
             brightness_max,
             color_temp_min,
             color_temp_max)
-        
+
         if state_attributes is not None:
             set_adaptive_values(adaptive_track_properties, state_attributes)
 
         if entity_id not in hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES]:
-            add_entity_to_adaptive_track(adaptive_track_properties)            
+            add_entity_to_adaptive_track(adaptive_track_properties)
 
 
     def set_adaptive_values(ap: AdaptiveProperties, state_attributes) -> None:
 
-        if(ap.enable_brightness and
-            ap.brightness_min and
-            ap.brightness_max):
+        _LOGGER.debug("Applying adaptive values using configuration: %s", ap)
+
+        if (ap.enable_brightness and
+            ap.brightness_min and ap.brightness_max):
 
             brightness_input = float(hass.states.get(ap.brightness_input_entity_id).state)
             brightness_adaptive_factor = 1.0 - (float(min(max(brightness_input, ap.brightness_input_min), ap.brightness_input_max)) / float(ap.brightness_input_max))
-            state_attributes[ATTR_BRIGHTNESS] = int(ap.brightness_max - ((ap.brightness_max - ap.brightness_min) * brightness_adaptive_factor))
+            state_attributes[ATTR_BRIGHTNESS] = int(round(ap.brightness_max - ((ap.brightness_max - ap.brightness_min) * brightness_adaptive_factor)))
+
+            _LOGGER.debug("input_brightness:%s brighness_factor:%s", brightness_input, brightness_adaptive_factor)
 
         if (ap.enable_color_temp and
             ap.color_temp_max and
             ap.color_temp_min):
 
             sun_adaptive_factor = float(hass.states.get("sensor.adaptive_lighting_factor").state)
-            state_attributes[ATTR_COLOR_TEMP] = int(((ap.color_temp_max - ap.color_temp_min) * sun_adaptive_factor) + ap.color_temp_min)
+            state_attributes[ATTR_COLOR_TEMP] = int(round(((ap.color_temp_max - ap.color_temp_min) * sun_adaptive_factor) + ap.color_temp_min))
             state_attributes[ATTR_COLOR_MODE] = COLOR_MODE_COLOR_TEMP
 
+            _LOGGER.debug("sun_factor:%s", sun_adaptive_factor)
 
-    async def update_adaptive(entities: List[AdaptiveProperties], context: Context, input_entity_id: str | None = None) -> None:       
+        _LOGGER.debug("Resulting attributes for %s: %s", ap.entity_id, state_attributes)
+
+
+    async def update_adaptive(entities: List[any], context: Context, input_entity_id: str | None = None) -> None:
         states = []
-        for entity_adapative_properties in entities:
+        for entity_adaptive_properties in entities:
+            if isinstance(entity_adaptive_properties, str):
+                entity_adaptive_properties = hass.data[DOMAIN][DATA_ADAPTIVE_ENTITIES][entity_adaptive_properties]
 
-            if ((entity_adapative_properties.enable_brightness and entity_adapative_properties.brightness_input_entity_id == input_entity_id) or
-                entity_adapative_properties.enable_color_temp and input_entity_id == "sun"):
+            if ((entity_adaptive_properties.enable_brightness and (entity_adaptive_properties.brightness_input_entity_id == input_entity_id or input_entity_id is None)) or
+                entity_adaptive_properties.enable_color_temp and (input_entity_id == "sun" or input_entity_id is None)):
                 attrs = {}
-                set_adaptive_values(entity_adapative_properties, attrs)
 
-            states.append(State(entity_adapative_properties.entity_id, STATE_ON, attrs))
+                set_adaptive_values(entity_adaptive_properties, attrs)
+                states.append(State(entity_adaptive_properties.entity_id, STATE_ON, attrs))
 
         await async_reproduce_state(hass, states, context=context)
 
@@ -612,33 +625,47 @@ def setup(hass: HomeAssistant, config: Config):
         entity_id = call.data.get(ATTR_ENTITY_ID)
         brightness = call.data.get(ATTR_BRIGHTNESS)
         color_temp = call.data.get(ATTR_COLOR_TEMP)
-        if brightness or color_temp:
-            if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+        states = []
 
-                entities = [group_entity
-                    for group_entity in hass.components.group.get_entity_ids(entity_id)
-                    if ha.split_entity_id(group_entity)[0] == DOMAIN_LIGHT]
+        _LOGGER.debug("Call for adaptive brightness: %s", call.data)
 
-                    
-                for group_entity in entities:
-                    create_adaptive_track(group_entity, None, AdaptiveProperties(
-                        group_entity,
-                        brightness,
-                        color_temp
-                    ))
-                    
-                await update_adaptive(entities, call.context)
-            else:
-                if ha.split_entity_id(entity_id)[0] == DOMAIN_LIGHT:
-                    create_adaptive_track(entity_id, None, AdaptiveProperties(
-                        entity_id,
-                        brightness,
-                        color_temp
-                    ))
-                    await update_adaptive([entity_id], call.context)
+        if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+
+            entities = [group_entity
+                        for group_entity in hass.components.group.get_entity_ids(entity_id)
+                        if ha.split_entity_id(group_entity)[0] == DOMAIN_LIGHT]
+
+            for group_entity in entities:
+                entity_attrs = {}
+                create_adaptive_track(group_entity, entity_attrs, AdaptiveProperties(
+                    group_entity, brightness is True, color_temp is True,
+                    None, None, None, None, None, None, None
+                ))
+                if brightness is not None and brightness is not True:
+                    entity_attrs[ATTR_BRIGHTNESS] = brightness
+                if color_temp is not None and color_temp is not True:
+                    entity_attrs[ATTR_COLOR_TEMP] = color_temp
+                    entity_attrs[ATTR_COLOR_MODE] = COLOR_MODE_COLOR_TEMP
+
+                states.append(State(group_entity, STATE_ON, entity_attrs))
+        else:
+            if ha.split_entity_id(entity_id)[0] == DOMAIN_LIGHT:
+                entity_attrs = {}
+                create_adaptive_track(entity_id, entity_attrs, AdaptiveProperties(
+                    entity_id, brightness is True, color_temp is True,
+                    None, None, None, None, None, None, None
+                ))
+                if brightness is not None and brightness is not True:
+                    entity_attrs[ATTR_BRIGHTNESS] = brightness
+                if color_temp is not None and color_temp is not True:
+                    entity_attrs[ATTR_COLOR_TEMP] = color_temp
+                    entity_attrs[ATTR_COLOR_MODE] = COLOR_MODE_COLOR_TEMP
+                states.append(State(entity_id, STATE_ON, entity_attrs))
+
+        await async_reproduce_state(hass, states, context=call.context)
 
     hass.services.register(DOMAIN, SERVICE_ADD_ADAPTIVE,
-                           add_adaptive, cv.make_entity_service_schema(SERVICE_ADD_ADAPTIVE_SCHEMA))
+                           add_adaptive, SERVICE_ADD_ADAPTIVE_SCHEMA)
 
     @callback
     async def remove_adaptive(call: ServiceCall):
