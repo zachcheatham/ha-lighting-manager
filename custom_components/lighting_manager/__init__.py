@@ -16,11 +16,12 @@ from homeassistant.const import (
 )
 from homeassistant import core as ha
 from homeassistant.core import Config, Context, Event, HomeAssistant, ServiceCall, State, callback
-from homeassistant.components.group import DOMAIN as DOMAIN_GROUP
+from homeassistant.components.group import DOMAIN as DOMAIN_GROUP, get_entity_ids
 from homeassistant.components.sensor import DOMAIN as DOMAIN_SENSOR
 from homeassistant.components.light import (DOMAIN as DOMAIN_LIGHT, ATTR_COLOR_TEMP, ATTR_COLOR_MODE,
                                             COLOR_MODE_COLOR_TEMP, ATTR_BRIGHTNESS, ATTR_RGB_COLOR, ATTR_RGBW_COLOR,
                                             ATTR_EFFECT)
+from homeassistant.helpers.discovery import async_load_platform
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
 from homeassistant.helpers.state import async_reproduce_state
@@ -158,7 +159,7 @@ class AdaptiveProperties:
     color_temp_min: int | None
     color_temp_max: int | None
 
-def setup(hass: HomeAssistant, config: Config):
+async def async_setup(hass: HomeAssistant, config: Config):
 
     conf = config[DOMAIN]
 
@@ -320,7 +321,7 @@ def setup(hass: HomeAssistant, config: Config):
         # Split out groups
         for entity_id in entity_states:
             if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
-                for group_entity in hass.components.group.get_entity_ids(entity_id):
+                for group_entity in get_entity_ids(hass, entity_id):
                     ungrouped_entity_states[group_entity] = handle_replacements(
                         group_entity, entity_states[entity_id], color=color)
             else:
@@ -351,7 +352,7 @@ def setup(hass: HomeAssistant, config: Config):
 
         await apply_entities(affected_entities, non_managed_entities, call.context)
 
-    hass.services.register(
+    hass.services.async_register(
         DOMAIN, SERVICE_INSERT_SCENE, insert_scene, SERVICE_INSERT_SCENE_SCHEMA
     )
 
@@ -372,7 +373,7 @@ def setup(hass: HomeAssistant, config: Config):
             affected_clear_entities = clear_layer(layer_id)
 
         if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
-            for entity in hass.components.group.get_entity_ids(entity_id):
+            for entity in get_entity_ids(hass, entity_id):
                 if entity in hass.data[DOMAIN][DATA_ENTITIES]:
                     affected_entities.append(entity)
                 else:
@@ -404,7 +405,7 @@ def setup(hass: HomeAssistant, config: Config):
         if len(affected_entities) > 0 or len(extra_states) > 0:
             await apply_entities(affected_entities, extra_states, call.context)
 
-    hass.services.register(
+    hass.services.async_register(
         DOMAIN, SERVICE_INSERT_STATE, insert_state, SERVICE_INSERT_STATE_SCHEMA
     )
 
@@ -417,7 +418,7 @@ def setup(hass: HomeAssistant, config: Config):
 
         if entity_id:
             if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
-                for light_entity in hass.components.group.get_entity_ids(entity_id):
+                for light_entity in get_entity_ids(hass, entity_id):
                     if (
                         light_entity in hass.data[DOMAIN][DATA_ENTITIES]
                         and layer_id in hass.data[DOMAIN][DATA_STATES][light_entity]
@@ -439,7 +440,7 @@ def setup(hass: HomeAssistant, config: Config):
         if len(affected_entities) > 0:
             await apply_entities(affected_entities, [], call.context)
 
-    hass.services.register(
+    hass.services.async_register(
         DOMAIN, SERVICE_REMOVE_LAYER, remove_layer, SERVICE_REMOVE_LAYER_SCHEMA
     )
 
@@ -447,7 +448,7 @@ def setup(hass: HomeAssistant, config: Config):
     async def refresh_all(call: ServiceCall):
         await apply_entities(hass.data[DOMAIN][DATA_ENTITIES], [], call.context)
 
-    hass.services.register(
+    hass.services.async_register(
         DOMAIN, SERVICE_REFRESH_ALL, refresh_all
     )
 
@@ -457,13 +458,13 @@ def setup(hass: HomeAssistant, config: Config):
         if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
             await apply_entities([
                 group_entity
-                for group_entity in hass.components.group.get_entity_ids(entity_id)
+                for group_entity in get_entity_ids(hass, entity_id)
                 if group_entity in hass.data[DOMAIN][DATA_ENTITIES]
             ], [], call.context)
         else:
             await apply_entities([entity_id], [], call.context)
 
-    hass.services.register(DOMAIN, SERVICE_REFRESH,
+    hass.services.async_register(DOMAIN, SERVICE_REFRESH,
                            refresh, SERVICE_REFRESH_SCHEMA)
 
     @callback
@@ -632,7 +633,7 @@ def setup(hass: HomeAssistant, config: Config):
         if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
 
             entities = [group_entity
-                        for group_entity in hass.components.group.get_entity_ids(entity_id)
+                        for group_entity in get_entity_ids(hass, entity_id)
                         if ha.split_entity_id(group_entity)[0] == DOMAIN_LIGHT]
 
             for group_entity in entities:
@@ -664,7 +665,7 @@ def setup(hass: HomeAssistant, config: Config):
 
         await async_reproduce_state(hass, states, context=call.context)
 
-    hass.services.register(DOMAIN, SERVICE_ADD_ADAPTIVE,
+    hass.services.async_register(DOMAIN, SERVICE_ADD_ADAPTIVE,
                            add_adaptive, SERVICE_ADD_ADAPTIVE_SCHEMA)
 
     @callback
@@ -672,13 +673,13 @@ def setup(hass: HomeAssistant, config: Config):
         entity_id = call.data.get(ATTR_ENTITY_ID)
         if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
             remove_entities_from_adaptive_track(
-                hass.components.group.get_entity_ids(entity_id))
+                get_entity_ids(hass, entity_id))
         else:
             remove_entities_from_adaptive_track([entity_id])
 
-    hass.services.register(DOMAIN, SERVICE_REMOVE_ADAPTIVE,
+    hass.services.async_register(DOMAIN, SERVICE_REMOVE_ADAPTIVE,
                            remove_adaptive, SERVICE_REMOVE_ADAPTIVE_SCHEMA)
 
-    hass.helpers.discovery.load_platform(DOMAIN_SENSOR, DOMAIN, {}, config)
+    hass.async_create_task(async_load_platform(hass, DOMAIN_SENSOR, DOMAIN, {}, config))
 
     return True
