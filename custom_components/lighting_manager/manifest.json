@@ -2,7 +2,12 @@
     "domain": "lighting_manager",
     "name": "Lighting Manager",
     "documentation": "https://github.com/zachcheatham/ha-lighting-manager",
-    "dependencies": [],
     "codeowners": ["@zachcheatham"],
-    "version": "0.0.5"
+    "version": "0.1.0",
+    "config_flow": true,
+    "integration_type": "service",
+    "iot_class": "local_push",
+    "dependencies": [],
+    "requirements": [],
+    "homeassistant": "2025.7.0"
 }

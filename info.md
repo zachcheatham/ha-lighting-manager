@@ -6,20 +6,7 @@ Instead of maintaining one previous light state using scene.create, this integra
 
 1) Install this repository via HACS
 
-2) Configure the integration via configuration.yaml
-
-Example Configuration
-```
-lighting_manager:
-  entities:
-    - light.porch_light_1
-    - light.porch_light_2
-    - light.foh_light_1
-    - light.foh_light_2
-    - light.foh_light_3
-```
-
-Each light that should be "managed" must be listed in the entities array of the configuration.
+2) In Home Assistant 2025.7 or later, add *Lighting Manager* from the integrations UI and select the lights you want to manage. Options such as adaptive elevation limits can be changed from the integration options after setup.
 
 ## Additional Links
 

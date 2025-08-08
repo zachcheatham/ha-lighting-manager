@@ -1,56 +1,97 @@
+"""Sensors for Lighting Manager."""
+from __future__ import annotations
+
 from typing import Any, Mapping
-from homeassistant.core import Event, State
+
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
-from . import CONF_MIN_ELEVATION, CONF_MAX_ELEVATION, CONF_ADAPTIVE
-import logging
+from homeassistant.const import ATTR_ELEVATION
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import (
+    TrackStates,
+    async_track_state_change_filtered,
+)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-DOMAIN = "lighting_manager"
+from .const import (
+    CONF_MAX_ELEVATION,
+    CONF_MIN_ELEVATION,
+    DOMAIN,
+)
 
-_LOGGER = logging.getLogger(__name__)
+from .manager import LightingManager
+from .coordinator import ZoneCoordinator
 
 
-def setup_platform(hass, config, add_entities, discovery_info=None):
-    add_entities([AdaptiveLightFactorSensor()])
+async def async_setup_entry(
+    hass: HomeAssistant, entry, async_add_entities
+) -> None:
+    data = hass.data[DOMAIN][entry.entry_id]
+    manager: LightingManager = data["manager"]
+    coordinator: ZoneCoordinator = data["coordinator"]
+    async_add_entities(
+        [AdaptiveLightFactorSensor(manager), ActiveLayerSensor(coordinator)]
+    )
+
 
 class AdaptiveLightFactorSensor(SensorEntity):
-
-    _attr_should_poll: bool = False
-    _attr_name: str = "Adaptive Lighting Factor"
+    _attr_should_poll = False
+    _attr_name = "Adaptive Lighting Factor"
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _min_elevation = 0
-    _max_elevation = 15
 
-    _current_factor: int = 0
+    def __init__(self, manager: LightingManager) -> None:
+        self._manager = manager
+        self._current_factor = 0.0
 
     async def async_added_to_hass(self) -> None:
-
-        self.recalculate(self.hass.states.get("sun.sun"))
-
+        self._recalculate(self.hass.states.get("sun.sun"))
         self.async_on_remove(
             async_track_state_change_filtered(
                 self.hass,
-                TrackStates(False, set(["sun.sun"]), None),
-                self.recalculate_from_event
+                TrackStates(False, {"sun.sun"}, None),
+                self._handle_event,
             )
         )
 
-    def recalculate(self, state: State) -> None:
-        elevation = state.attributes["elevation"] # TODO IMPORT ATTR CONST
+    @callback
+    def _handle_event(self, event) -> None:
+        self._recalculate(event.data.get("new_state"))
 
-        self._current_factor = 1.0 - (float(min(max(elevation, self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MIN_ELEVATION]),
-                                                self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_ELEVATION])) / float(self.hass.data[DOMAIN][CONF_ADAPTIVE][CONF_MAX_ELEVATION]))
-
-        self.schedule_update_ha_state()
-
-    def recalculate_from_event(self, event: Event) -> None:
-        self.recalculate(event.data.get("new_state"))
+    @callback
+    def _recalculate(self, state) -> None:
+        if state is None:
+            return
+        elevation = state.attributes.get(ATTR_ELEVATION, 0)
+        min_el = self._manager.adaptive.get(CONF_MIN_ELEVATION, 0)
+        max_el = self._manager.adaptive.get(CONF_MAX_ELEVATION, 15)
+        span = max_el - min_el or 1
+        clamped = min(max(elevation, min_el), max_el)
+        self._current_factor = 1.0 - ((clamped - min_el) / span)
+        self.async_write_ha_state()
 
     @property
-    def native_value(self) -> int:
-        return self._current_factor
+    def native_value(self) -> float:
+        return round(self._current_factor, 3)
 
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
-        return self.hass.data[DOMAIN][CONF_ADAPTIVE]
+        return self._manager.adaptive
+
+
+class ActiveLayerSensor(CoordinatorEntity, SensorEntity):
+    _attr_should_poll = False
+    _attr_name = "Active Layers"
+
+    def __init__(self, coordinator: ZoneCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator._zone_id}_layers"
+
+    @property
+    def native_value(self) -> int:
+        return len(self.coordinator.data.get("active_layers", []))
+
+    @property
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+        return {
+            "layers": self.coordinator.data.get("active_layers", []),
+            "winning_layer": self.coordinator.data.get("winning_layer"),
+        }
