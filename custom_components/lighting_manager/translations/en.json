@@ -1,0 +1,64 @@
+{
+  "title": "Lighting Manager",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Lighting Manager",
+        "description": "Create a zone",
+        "data": {
+          "zone_id": "Zone name",
+          "entities": "Managed lights"
+        }
+      }
+    },
+    "abort": {}
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Lighting Manager",
+        "description": "Update managed lights",
+        "data": {
+          "entities": "Managed lights"
+        }
+      }
+    }
+  },
+  "services": {
+    "activate_layer": {
+      "name": "Activate layer",
+      "description": "Activate a layer with optional attributes.",
+      "fields": {
+        "entity_id": {"name": "Layer"},
+        "brightness": {"name": "Brightness"},
+        "color_temp": {"name": "Color temp"},
+        "rgb_color": {"name": "RGB color"},
+        "transition": {"name": "Transition"},
+        "source": {"name": "Source"},
+        "force": {"name": "Force"},
+        "locked": {"name": "Locked"}
+      }
+    },
+    "deactivate_layer": {
+      "name": "Deactivate layer",
+      "description": "Deactivate a layer.",
+      "fields": {
+        "entity_id": {"name": "Layer"}
+      }
+    },
+    "update_layer": {
+      "name": "Update layer",
+      "description": "Update attributes of a layer.",
+      "fields": {
+        "entity_id": {"name": "Layer"},
+        "brightness": {"name": "Brightness"},
+        "color_temp": {"name": "Color temp"},
+        "rgb_color": {"name": "RGB color"},
+        "transition": {"name": "Transition"},
+        "source": {"name": "Source"},
+        "force": {"name": "Force"},
+        "locked": {"name": "Locked"}
+      }
+    }
+  }
+}

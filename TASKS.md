@@ -1,0 +1,99 @@
+# Task Tracker
+
+## Completed
+- Migrated integration to config entries and async setup entry
+- Added `LightingManager` class for layered state management
+- Implemented config flow with adaptive elevation options
+- Modernized sensors for adaptive factor and active layers
+- Introduced layer entity platform and coordinator engine
+- Updated services with selectors and translations
+- Replaced README with layer entity documentation
+- Drafted implementation plan for entity-based architecture
+- Fulfilled requirements REQ-L001–REQ-L008, REQ-O001–REQ-O004, REQ-A001–REQ-A003
+
+## TODO
+- Expand adaptive settings and per-entity overrides
+- Add comprehensive tests and type hints
+- Update README to focus on config entry setup instead of YAML configuration
+- Implement advanced services and conflict detection
+
+- [REQ-O005] Calculator must be pure functions with no side effects
+- [REQ-O006] Priority resolution: Highest priority active layer wins
+- [REQ-O007] Force flag overrides normal priority calculations
+- [REQ-O008] Locked layers cannot be modified by any calculation
+- [REQ-O009] Add layer merging for compatible properties
+- [REQ-O010] Detect and report priority ties
+- [REQ-O011] Detect and report conflicting force flags
+- [REQ-O012] Log all conflicts with resolution strategy used
+- [REQ-O013] Fire events for conflicts requiring user intervention
+- [REQ-O014] Apply calculated state to all zone lights atomically
+- [REQ-O015] Support transition times for smooth changes
+- [REQ-O016] Handle unavailable lights gracefully
+- [REQ-O017] Respect individual light capabilities
+- [REQ-S001] Sensor for winning layer per zone
+- [REQ-S002] Sensor for calculation path (layer evaluation order)
+- [REQ-S003] Sensor for last calculation timestamp
+- [REQ-S004] Sensor for conflict status and details
+- [REQ-S005] Sensor for full calculation input (all active layers)
+- [REQ-S006] Sensor for final calculation output (final state)
+- [REQ-S007] Sensor for performance metrics (calculation time)
+- [REQ-S008] Event lighting_manager.layer_activated
+- [REQ-S009] Event lighting_manager.layer_deactivated
+- [REQ-S010] Event lighting_manager.calculation_complete
+- [REQ-S011] Event lighting_manager.conflict_detected
+- [REQ-S012] Event lighting_manager.state_applied
+- [REQ-A004] Service lighting_manager.set_layer_priority
+- [REQ-A005] Service lighting_manager.lock_layer
+- [REQ-A006] Service lighting_manager.unlock_layer
+- [REQ-A007] Service lighting_manager.force_layer
+- [REQ-A008] Service lighting_manager.recalculate_zone
+- [REQ-A009] Service lighting_manager.reset_zone
+- [REQ-A010] Service lighting_manager.create_dynamic_layer
+- [REQ-A011] Service lighting_manager.apply_preset
+- [REQ-C003] Per-zone options (transition time, adaptive ranges, layer types)
+- [REQ-C004] Register each zone as device in registry
+- [REQ-C005] Group zone entities under zone device
+- [REQ-C006] Device info should include version and capabilities
+- [REQ-I001] Read adaptive values from external sensors
+- [REQ-I002] Support sun-based calculations
+- [REQ-I003] Support time-based profiles
+- [REQ-I004] Manual adaptive factor override
+- [REQ-I005] Link zones to areas optionally
+- [REQ-I006] Auto-discover lights in area
+- [REQ-I007] Support area-wide presets
+- [REQ-I008] Activate layers via scenes
+- [REQ-I009] Restore scene states through layers
+- [REQ-I010] Support scene transition times
+- [REQ-P001] Trigger calculation within 100ms of layer change
+- [REQ-P002] Complete calculations within 50ms for 10 layers
+- [REQ-P003] Send light commands within 200ms of trigger
+- [REQ-P004] Support up to 20 zones
+- [REQ-P005] Support up to 20 layers per zone
+- [REQ-P006] Support up to 50 lights per zone
+- [REQ-P007] Use callback decorators for synchronous operations
+- [REQ-P008] Batch light commands when possible
+- [REQ-P009] Cache calculation results for identical inputs
+- [REQ-U001] Ensure all layers visible in entity list
+- [REQ-U002] Ensure all sensors visible with clear naming
+- [REQ-U003] Document services with descriptions and examples
+- [REQ-U004] Every state change observable in UI
+- [REQ-U005] Traceable calculation path
+- [REQ-U006] Clearly report conflicts
+- [REQ-U007] Deterministic outputs for same inputs
+- [REQ-U008] Consistent priority rules
+- [REQ-U009] Eliminate hidden state and side effects
+- [REQ-M001] Auto-import existing YAML config on first run
+- [REQ-M002] Convert input_numbers to layer entities
+- [REQ-M003] Preserve all settings and state during migration
+- [REQ-M004] Remove obsolete entities after migration
+- [REQ-M005] Archive old configuration
+- [REQ-M006] Provide rollback instructions
+- [REQ-T001] Unit tests: 100% coverage for calculator functions
+- [REQ-T002] Unit tests for priority edge cases
+- [REQ-T003] Unit tests for conflict detection scenarios
+- [REQ-T004] Integration tests for Calculate→Store→Apply flow
+- [REQ-T005] Integration tests for service calls
+- [REQ-T006] Integration tests for event firing
+- [REQ-T007] Benchmark calculation performance
+- [REQ-T008] Test with maximum supported entities
+- [REQ-T009] Profile memory usage

@@ -1,79 +1,93 @@
-insert_scene:
-  description: Apply a scene to lights
+activate_layer:
+  description: Activate a layer with optional state attributes.
+  target:
+    entity:
+      domain: layer
   fields:
-    entity_id:
-      description: entity_id of scene to apply
-      example: "scene.name_of_scene"
-    id:
-      description: Unique identifier of layer
-      example: "my_layer_name"
-    priority:
-      description: Layer priority of scene (Higher the more visible)
-      example: "0"
-    clear_layer:
-      description: Clears all other entity states from layer before applying when true.
-      example: "true"
-    color:
-      description: RGB color value to fill in scene states.
-      example: "[255, 255, 0]"
-
-insert_state:
-  description: Set entity state at specified layer.
-  fields:
-    entity_id:
-      description: entity_id of entity or group
-      example: "domain.name_of_entity"
-    priority:
-      description: Layer priority
-      example: "0"
-    id:
-      description: Unique identifier of layer
-      example: "my_layer_name"
-    state:
-      description: Desired entity state
-      example: "on"
-    attributes:
-      description: State Attributes
-    clear_layer:
-      description: Clears all other entity states from layer before applying when true.
-      example: "true"
-
-remove_layer:
-  description: Remove layer or scene from all lights, a specified group, or a specified light.
-  fields:
-    entity_id:
-      description: entity_id of light or group. When no entity is specified, layer will be removed from all lights.
-      example: "light.name_of_light"
-    id:
-      description: Layer ID or entity id of scene to be removed.
-      example: "my_layer_name"
-
-refresh:
-  description: Refresh provided group or entity to current state.
-  fields:
-    entity_id:
-      description: entity_id of entity or group to be refreshed.
-      example: "light.name_of_light"
-
-refresh_all:
-  description: Refresh all managed entities to their current state.
-
-add_adaptive:
-  description: Add light or group of lights to adaptive time-of-day based color temperature until it is turned off.
-  fields:
-    entity_id:
-      description: entity_id of light or group containing lights.
-      example: light.name_of_light
     brightness:
-      description: Optional boolean indicating whether to adaptively adjust brightness or integer to indicate turn_on brightness
-      example: true
+      description: Optional brightness value.
+      selector:
+        number:
+          min: 0
+          max: 255
+          mode: slider
     color_temp:
-      description: Optional boolean indicating whether to adaptively adjust color temperature
-      example: true
+      description: Optional color temperature in mireds.
+      selector:
+        number:
+          min: 153
+          max: 500
+          mode: box
+    rgb_color:
+      description: Optional RGB color value.
+      selector:
+        color_rgb:
+    transition:
+      description: Transition time in seconds.
+      selector:
+        number:
+          min: 0
+          max: 60
+          mode: box
+    source:
+      description: Source of this state.
+      selector:
+        text:
+    force:
+      description: Force this layer regardless of priority.
+      selector:
+        boolean:
+    locked:
+      description: Prevent further changes to this layer.
+      selector:
+        boolean:
 
-remove_adaptive:
-  description: Remove light or group of lights from having their color temperature adjusted based on time-of-day.
+deactivate_layer:
+  description: Deactivate a layer.
+  target:
+    entity:
+      domain: layer
+
+update_layer:
+  description: Update attributes of a layer without changing activation.
+  target:
+    entity:
+      domain: layer
   fields:
-    entity_id:
-      description: entity_id of light or group containing lights.
-
+    brightness:
+      description: Optional brightness value.
+      selector:
+        number:
+          min: 0
+          max: 255
+          mode: slider
+    color_temp:
+      description: Optional color temperature in mireds.
+      selector:
+        number:
+          min: 153
+          max: 500
+          mode: box
+    rgb_color:
+      description: Optional RGB color value.
+      selector:
+        color_rgb:
+    transition:
+      description: Transition time in seconds.
+      selector:
+        number:
+          min: 0
+          max: 60
+          mode: box
+    source:
+      description: Source of this state.
+      selector:
+        text:
+    force:
+      description: Force this layer regardless of priority.
+      selector:
+        boolean:
+    locked:
+      description: Prevent further changes to this layer.
+      selector:
+        boolean:
