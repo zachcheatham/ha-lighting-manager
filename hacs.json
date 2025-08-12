@@ -1,4 +1,4 @@
 {
-    "name": "Lighting Manager",
-    "domains": ["sensor"]
+    "name": "Layer Manager",
+    "domains": []
 }

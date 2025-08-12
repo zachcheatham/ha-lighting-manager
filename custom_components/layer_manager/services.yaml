@@ -1,52 +1,55 @@
 insert_scene:
-  description: Apply a scene to lights
+  description: Insert a scene as a layer
   fields:
     entity_id:
-      description: entity_id of scene to apply
+      description: Scene entity to insert
       example: "scene.name_of_scene"
     id:
       description: Unique identifier of layer
       example: "my_layer_name"
     priority:
-      description: Layer priority of scene (Higher the more visible)
+      description: Layer priority (The higher value, the more visible)
       example: "0"
     clear_layer:
       description: Clears all other entity states from layer before applying when true.
       example: "true"
     color:
-      description: RGB color value to fill in scene states.
-      example: "[255, 255, 0]"
+      description: RGB(W) color value to fill in scene states.
+      example: "[255, 255, 0, (255)]"
 
 insert_state:
-  description: Set entity state at specified layer.
+  description: Insert a state as a layer
   fields:
     entity_id:
-      description: entity_id of entity or group
+      description: Target Entity
       example: "domain.name_of_entity"
     priority:
-      description: Layer priority
+      description: Layer priority (The higher value, the more visible)
       example: "0"
     id:
       description: Unique identifier of layer
       example: "my_layer_name"
     state:
-      description: Desired entity state
+      description: Entity State
       example: "on"
     attributes:
-      description: State Attributes
+      description: Entity Attributes
     clear_layer:
       description: Clears all other entity states from layer before applying when true.
       example: "true"
 
 remove_layer:
-  description: Remove layer or scene from all lights, a specified group, or a specified light.
+  description: Remove layer or scene from all or a specific entity.
   fields:
     entity_id:
-      description: entity_id of light or group. When no entity is specified, layer will be removed from all lights.
+      description: Entity to remove layer from. When no entity is specified, the layer will be removed from all lights.
       example: "light.name_of_light"
     id:
-      description: Layer ID or entity id of scene to be removed.
+      description: Layer ID to be removed.
       example: "my_layer_name"
+
+remove_all_layers:
+  description: Remove all layers from all entities
 
 refresh:
   description: Refresh provided group or entity to current state.
@@ -62,7 +65,7 @@ add_adaptive:
   description: Add light or group of lights to adaptive time-of-day based color temperature until it is turned off.
   fields:
     entity_id:
-      description: entity_id of light or group containing lights.
+      description: Entity of light or group containing lights.
       example: light.name_of_light
     brightness:
       description: Optional boolean indicating whether to adaptively adjust brightness or integer to indicate turn_on brightness

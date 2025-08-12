@@ -1,0 +1,61 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Layer Manager",
+                "description": "This enables Layer Manager in your instance. Be sure to add managed entities via the Configuration Options after the integration is added."
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "menu_options": {
+                    "manage_entities": "Select Managed Entities",
+                    "global_adaptive_settings": "Global Adaptive Settings",
+                    "select_advanced_entity": "Advanced Entitiy Settings"
+                }
+            },
+            "manage_entities": {
+                "description": "Choose entities to be managed:",
+                "data": {
+                    "entities": "Managed Entities"
+                }
+            },
+            "select_advanced_entity": {
+                "description": "Choose entity to edit settings of:",
+                "data": {
+                    "entity_id": "Entity"
+                }
+            },
+            "advanced_entity_settings": {
+                "description": "Advanced Entity Settings ({entity_id}). Any unset values will use the global default.",
+                "data": {
+                    "default_state": "Default state when there is no active layer.",
+                    "brightness_min": "Minimum Adaptive Brightness Value",
+                    "brightness_max": "Maximum Adaptive Brightness Value",
+                    "color_temp_min": "Minimum Adaptive Color Temp",
+                    "color_temp_max": "Maximum Adaptive Color Temp",
+                    "input_brightness_entity": "Adaptive Brightness Sensor Entity. Must first be configured in the global adaptive settings.",
+                    "input_brightness_min": "Adaptive Input Sensor Minimum",
+                    "input_brightness_max": "Adaptive Input Sensor Maximum"
+                }
+            },
+            "global_adaptive_settings": {
+                "description": "Adaptive Lighting Settings",
+                "data": {
+                    "elevation_min": "Minimum Sun Elevation",
+                    "elevation_max": "Maximum Sun Elevation",
+                    "brightness_min": "Minimum Brightness Value",
+                    "brightness_max": "Maximum Brightness Value",
+                    "color_temp_min": "Minimum Color Temp",
+                    "color_temp_max": "Maximum Color Temp",
+                    "adaptive_input_entities": "Sensors Entities to Track for Adaptive Input",
+                    "input_brightness_entity": "Default Brightness Sensor Entity",
+                    "input_brightness_min": "Default Input Sensor Minimum",
+                    "input_brightness_max": "Default Input Sensor Maximum"
+                }
+            }
+        }
+    }
+}

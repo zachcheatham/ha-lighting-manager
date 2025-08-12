@@ -1,0 +1,28 @@
+{
+    "services": {
+        "insert_scene": {
+            "service": "mdi:layers-plus"
+        },
+        "insert_state": {
+            "service": "mdi:layers-plus"
+        },
+        "remove_layer": {
+            "service": "mdi:layers-minus"
+        },
+        "remove_all_layers": {
+            "service": "mdi:layers-off"
+        },
+        "refresh_all": {
+            "service": "mdi:reload"
+        },
+        "refresh": {
+            "service": "mdi:reload"
+        },
+        "add_adaptive": {
+            "service": "mdi:brightness-auto"
+        },
+        "remove_adaptive": {
+            "service": "mdi:close-circle"
+        }
+    }
+}
