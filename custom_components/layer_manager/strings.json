@@ -13,7 +13,7 @@
                 "menu_options": {
                     "manage_entities": "Select Managed Entities",
                     "global_adaptive_settings": "Global Adaptive Settings",
-                    "select_advanced_entity": "Advanced Entitiy Settings"
+                    "select_advanced_entity": "Advanced Entity Settings"
                 }
             },
             "manage_entities": {

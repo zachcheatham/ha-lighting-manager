@@ -52,7 +52,7 @@ class LayerManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class LayerManagerOptionsFlowHandler(config_entries.OptionsFlow):
 
-    VERSION = 2
+    VERSION = 1
 
     def __init__(self):
         self.entity_id_to_config = None

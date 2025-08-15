@@ -20,14 +20,15 @@ from homeassistant.core import Context, Event, HomeAssistant, ServiceCall, State
 from homeassistant.core_config import Config
 from homeassistant.components.group import DOMAIN as DOMAIN_GROUP, get_entity_ids
 from homeassistant.components.number import DOMAIN as DOMAIN_NUMBER
-from homeassistant.components.cover import DOMAIN as DOMAIN_COVER, CoverState
+from homeassistant.components.cover import (DOMAIN as DOMAIN_COVER, CoverState,
+                                            ATTR_CURRENT_TILT_POSITION, ATTR_TILT_POSITION)
 from homeassistant.components.scene import DOMAIN as DOMAIN_SCENE, DATA_COMPONENT as DATA_HA_SCENE
 from homeassistant.components.fan import DOMAIN as DOMAIN_FAN
 from homeassistant.components.light import (DOMAIN as DOMAIN_LIGHT, ATTR_COLOR_TEMP_KELVIN, ATTR_COLOR_MODE,
                                             ATTR_BRIGHTNESS, ATTR_RGB_COLOR, ATTR_RGBW_COLOR, ATTR_EFFECT,
                                             ColorMode)
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_ELEVATION
+from homeassistant.const import ATTR_ELEVATION, SERVICE_SET_COVER_TILT_POSITION
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
 from homeassistant.helpers.state import async_reproduce_state
 from homeassistant.helpers.storage import Store
@@ -387,7 +388,7 @@ class LayerManagerCoordinator:
         else:
             return state
 
-    def _render_entity(self, entity_id: str) -> State:
+    def _render_entity(self, entity_id: str) -> State | tuple:
         layers = self.entity_states.get(entity_id)
         if not layers:
             if entity_id in self.adaptive_entities:
@@ -400,6 +401,7 @@ class LayerManagerCoordinator:
         active_layer = max(layers.values(), key=lambda layer: layer[ATTR_PRIORITY])
         active_state = active_layer[ATTR_STATE]
         has_adaptive = self._state_has_adaptive(active_state)
+
         if has_adaptive:
             new_attributes = dict(active_state.attributes)
             brightness_str = str(new_attributes.get(ATTR_BRIGHTNESS, ""))
@@ -424,10 +426,22 @@ class LayerManagerCoordinator:
                         setattr(props, k, v)
 
             self._create_adaptive_track(entity_id, new_attributes, props)
-            return State(entity_id, active_state.state, new_attributes)
-
-        if not has_adaptive and entity_id in self.adaptive_entities:
+            active_state = State(entity_id, active_state.state, new_attributes)
+        elif entity_id in self.adaptive_entities:
             self._remove_entities_from_adaptive_track([entity_id])
+
+        # Handle service call enhancements
+        if (ha.split_entity_id(entity_id)[0] == DOMAIN_COVER and
+            ATTR_CURRENT_TILT_POSITION in active_state.attributes):
+
+            return (
+                DOMAIN_COVER,
+                SERVICE_SET_COVER_TILT_POSITION,
+                {
+                    ATTR_ENTITY_ID: entity_id,
+                    ATTR_TILT_POSITION: active_state.attributes[ATTR_CURRENT_TILT_POSITION]
+                }
+            )
 
         return active_state
 
@@ -507,10 +521,26 @@ class LayerManagerCoordinator:
 
     async def _apply_entities(self, entities: List[str], additional_states: List[State], context: Context | None):
         states_to_apply = additional_states[:]
+
         for entity_id in entities:
-            if entity_id in self.managed_entities:
-                states_to_apply.append(self._render_entity(entity_id))
-        states_to_apply = [x for x in states_to_apply if x is not None]
+            if entity_id not in self.managed_entities:
+                continue
+
+            rendered_state = self._render_entity(entity_id)
+            if rendered_state is None:
+                continue
+
+            if isinstance(rendered_state, State):
+                states_to_apply.append(rendered_state)
+            elif isinstance(rendered_state, tuple):
+                domain, service, service_data = rendered_state
+                await self.hass.services.async_call(
+                    domain,
+                    service,
+                    service_data,
+                    blocking=False
+                )
+
         if states_to_apply:
             await async_reproduce_state(self.hass, states_to_apply, context=context)
 
