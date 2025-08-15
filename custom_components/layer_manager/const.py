@@ -51,3 +51,5 @@ SUPPORTED_DOMAINS = [
 ]
 
 DEFAULT_CONF_NAME = "Layer Manager"
+
+SIGNAL_DATA_UPDATE = f"{DOMAIN}-data-changed"

@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 import logging
 import voluptuous as vol
-import homeassistant.helpers.config_validation as cv
 
 from typing import Any, Dict, List, cast
 
@@ -15,8 +14,7 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN
 )
-from homeassistant import core as ha
-from homeassistant.core import Context, Event, HomeAssistant, ServiceCall, State, callback
+from homeassistant.core import Context, Event, HomeAssistant, ServiceCall, State, callback, split_entity_id
 from homeassistant.components.group import DOMAIN as DOMAIN_GROUP, get_entity_ids
 from homeassistant.components.number import DOMAIN as DOMAIN_NUMBER
 from homeassistant.components.cover import (DOMAIN as DOMAIN_COVER, CoverState,
@@ -28,19 +26,20 @@ from homeassistant.components.light import (DOMAIN as DOMAIN_LIGHT, ATTR_COLOR_T
                                             ColorMode)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ELEVATION, SERVICE_SET_COVER_TILT_POSITION
+import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
 from homeassistant.helpers.state import async_reproduce_state
 from homeassistant.helpers.storage import Store
 
-from .const import (DOMAIN, SUPPORTED_DOMAINS, STORAGE_VERSION, STORAGE_KEY,
+from .const import (DOMAIN, SIGNAL_DATA_UPDATE, SUPPORTED_DOMAINS, STORAGE_VERSION, STORAGE_KEY,
                     ATTR_PRIORITY, ATTR_CLEAR_LAYER, ATTR_COLOR, ATTR_ATTRIBUTES, ATTR_COLOR_TEMP,
                     CONF_ADAPTIVE, CONF_MAX_COLOR_TEMP, CONF_MIN_COLOR_TEMP, CONF_MIN_BRIGHTNESS,
                     CONF_MAX_BRIGHTNESS, CONF_INPUT_BRIGHTNESS_MAX, CONF_INPUT_BRIGHTNESS_MIN,
                     CONF_INPUT_BRIGHTNESS_ENTITY, CONF_ADAPTIVE_INPUT_ENTITIES, CONF_DEFAULT_STATE,
                     CONF_MIN_ELEVATION, CONF_MAX_ELEVATION,
                     SERVICE_INSERT_SCENE, SERVICE_INSERT_STATE, SERVICE_REMOVE_LAYER, SERVICE_ADD_ADAPTIVE,
-                    SERVICE_REMOVE_ALL_LAYERS,
-                    SERVICE_REMOVE_ADAPTIVE, SERVICE_REFRESH, SERVICE_REFRESH_ALL)
+                    SERVICE_REMOVE_ALL_LAYERS, SERVICE_REMOVE_ADAPTIVE, SERVICE_REFRESH, SERVICE_REFRESH_ALL)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,6 +81,7 @@ SERVICE_ADD_ADAPTIVE_SCHEMA = vol.Schema(
 SERVICE_REMOVE_ADAPTIVE_SCHEMA = vol.Schema(
     {vol.Required(ATTR_ENTITY_ID): cv.entity_domain([DOMAIN_LIGHT, DOMAIN_GROUP])})
 
+
 @dataclass
 class AdaptiveProperties:
     entity_id: str | None
@@ -94,6 +94,7 @@ class AdaptiveProperties:
     brightness_max: int | None
     color_temp_min: int | None
     color_temp_max: int | None
+
 
 class LayerManagerCoordinator:
     def __init__(self, hass: HomeAssistant, config: ConfigEntry):
@@ -127,11 +128,14 @@ class LayerManagerCoordinator:
 
     async def async_initial_refresh(self):
         await self._apply_entities(self.managed_entities, [], None)
+        async_dispatcher_send(self.hass, SIGNAL_DATA_UPDATE)
 
     async def async_load_from_store(self):
         stored_data = await self._store.async_load()
-        if stored_data:
-            for entity_id, layers, in stored_data.items():
+        if stored_data and "states" in stored_data:
+
+            # Load Layers
+            for entity_id, layers, in stored_data.get("states", {}).items():
                 self.entity_states[entity_id] = {}
                 for layer_id, data in layers.items():
                     state_info = data.get(ATTR_STATE, {})
@@ -143,14 +147,18 @@ class LayerManagerCoordinator:
                         ATTR_STATE: reconstructed_state
                     }
 
+            # Load adaptive tracks
+            for entity_id, ap in stored_data.get("adaptive", {}).items():
+                self._create_adaptive_track(entity_id, {}, AdaptiveProperties(**ap))
+
     def _schedule_save(self):
-        serializable_states = {}
+        serialized_states = {}
         for entity_id, layers in self.entity_states.items():
             if entity_id not in self.managed_entities: continue
-            serializable_states[entity_id] = {}
+            serialized_states[entity_id] = {}
             for layer_id, data in layers.items():
                 state_obj = cast(State, data.get(ATTR_STATE))
-                serializable_states[entity_id][layer_id] = {
+                serialized_states[entity_id][layer_id] = {
                     ATTR_PRIORITY: data.get(ATTR_PRIORITY),
                     ATTR_STATE: {
                         "entity_id": state_obj.entity_id,
@@ -159,7 +167,11 @@ class LayerManagerCoordinator:
                     }
                 }
 
-        self._store.async_delay_save(lambda: serializable_states, 1)
+        async_dispatcher_send(self.hass, SIGNAL_DATA_UPDATE)
+        self._store.async_delay_save(lambda: {
+            "states": serialized_states,
+            "adaptive": self.adaptive_entities
+        }, 1)
 
     async def insert_scene(self, call: ServiceCall):
         scene_entity_id = call.data.get(ATTR_ENTITY_ID)
@@ -176,7 +188,7 @@ class LayerManagerCoordinator:
 
         # Split out groups
         for entity_id, state in entity_states.items():
-            if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+            if split_entity_id(entity_id)[0] == DOMAIN_GROUP:
                 for group_entity in get_entity_ids(self.hass, entity_id):
                     ungrouped_entity_states[group_entity] = self._handle_replacements(
                         group_entity, state, color=color)
@@ -217,7 +229,7 @@ class LayerManagerCoordinator:
         if should_clear:
             affected_entities.extend(self._clear_layer(layer_id))
 
-        if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+        if split_entity_id(entity_id)[0] == DOMAIN_GROUP:
             target_entities.extend(get_entity_ids(self.hass, entity_id))
         else:
             target_entities.append(entity_id)
@@ -230,7 +242,7 @@ class LayerManagerCoordinator:
                 overwrite_attributes = dict(attributes)
 
                 # Force Effect to None if not specified
-                if ha.split_entity_id(target_entity_id)[0] == DOMAIN_LIGHT and ATTR_EFFECT not in overwrite_attributes:
+                if split_entity_id(target_entity_id)[0] == DOMAIN_LIGHT and ATTR_EFFECT not in overwrite_attributes:
                     overwrite_attributes[ATTR_EFFECT] = "None"
 
                 self.entity_states.setdefault(target_entity_id, {})[layer_id] = {
@@ -250,7 +262,7 @@ class LayerManagerCoordinator:
         entities_to_check = []
 
         if entity_id:
-            if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+            if split_entity_id(entity_id)[0] == DOMAIN_GROUP:
                 entities_to_check.extend(get_entity_ids(self.hass, entity_id))
             else:
                 entities_to_check.append(entity_id)
@@ -284,7 +296,7 @@ class LayerManagerCoordinator:
     async def refresh(self, call: ServiceCall):
         entity_id = call.data.get(ATTR_ENTITY_ID)
         entities_to_refresh = []
-        if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP:
+        if split_entity_id(entity_id)[0] == DOMAIN_GROUP:
             entities_to_refresh.extend([e for e in get_entity_ids(self.hass, entity_id) if e in self.managed_entities])
         elif entity_id in self.managed_entities:
             entities_to_refresh.append(entity_id)
@@ -297,9 +309,9 @@ class LayerManagerCoordinator:
         color_temp = call.data.get(ATTR_COLOR_TEMP)
         states_to_apply = []
 
-        target_entities = get_entity_ids(self.hass, entity_id) if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP else [entity_id]
+        target_entities = get_entity_ids(self.hass, entity_id) if split_entity_id(entity_id)[0] == DOMAIN_GROUP else [entity_id]
 
-        for light_entity in [e for e in target_entities if ha.split_entity_id(e)[0] == DOMAIN_LIGHT]:
+        for light_entity in [e for e in target_entities if split_entity_id(e)[0] == DOMAIN_LIGHT]:
             attrs = {}
             props = AdaptiveProperties(
                     light_entity, brightness is True, color_temp is True,
@@ -318,7 +330,7 @@ class LayerManagerCoordinator:
 
     async def remove_adaptive(self, call: ServiceCall):
         entity_id = call.data.get(ATTR_ENTITY_ID)
-        entities_to_remove = get_entity_ids(self.hass, entity_id) if ha.split_entity_id(entity_id)[0] == DOMAIN_GROUP else [entity_id]
+        entities_to_remove = get_entity_ids(self.hass, entity_id) if split_entity_id(entity_id)[0] == DOMAIN_GROUP else [entity_id]
         self._remove_entities_from_adaptive_track(entities_to_remove)
         await self._apply_entities(entities_to_remove, [], call.context)
 
@@ -330,7 +342,7 @@ class LayerManagerCoordinator:
         return affected
 
     def _handle_replacements(self, entity_id: str, state: State, color: list | None = None) -> State:
-        if ha.split_entity_id(entity_id)[0] == DOMAIN_LIGHT:
+        if split_entity_id(entity_id)[0] == DOMAIN_LIGHT:
             new_attributes = dict(state.attributes)
 
             # Also default to no effect if not specified.
@@ -391,7 +403,7 @@ class LayerManagerCoordinator:
             self._remove_entities_from_adaptive_track([entity_id])
 
         # Handle service call enhancements
-        if (ha.split_entity_id(entity_id)[0] == DOMAIN_COVER and
+        if (split_entity_id(entity_id)[0] == DOMAIN_COVER and
             ATTR_CURRENT_TILT_POSITION in active_state.attributes):
 
             return (
@@ -409,7 +421,7 @@ class LayerManagerCoordinator:
         brightness = state.attributes.get(ATTR_BRIGHTNESS, None)
         color_temp = state.attributes.get(ATTR_COLOR_TEMP_KELVIN, None)
 
-        return ha.split_entity_id(state.entity_id)[0] == DOMAIN_LIGHT and (
+        return split_entity_id(state.entity_id)[0] == DOMAIN_LIGHT and (
             (isinstance(brightness, str) and brightness.startswith(CONF_ADAPTIVE)) or
             (isinstance(color_temp, str) and color_temp.startswith(CONF_ADAPTIVE)))
 
@@ -433,12 +445,14 @@ class LayerManagerCoordinator:
         if entity_id not in self.adaptive_entities:
             self._add_entity_to_adaptive_track(ap)
 
-    def _set_adaptive_values(self, ap: AdaptiveProperties, state_attributes: Dict) -> None:
-
+    def _set_adaptive_values(self, ap: AdaptiveProperties, state_attributes: Dict, debug=False) -> None:
         if ap.enable_brightness and ap.brightness_input_entity_id and (input_state := self.hass.states.get(ap.brightness_input_entity_id)):
             try:
                 input_val = float(input_state.state)
                 norm_val = 1.0 - (float(min(max(input_val, ap.brightness_input_min), ap.brightness_input_max)) / float(ap.brightness_input_max))
+
+                if debug:
+                    state_attributes["brightness_factor"] = norm_val
                 state_attributes[ATTR_BRIGHTNESS] = int(ap.brightness_max - ((ap.brightness_max - ap.brightness_min) * norm_val))
             except (ValueError, TypeError):
                 pass
@@ -446,7 +460,8 @@ class LayerManagerCoordinator:
         if ap.enable_color_temp:
             try:
                 state_attributes[ATTR_COLOR_TEMP_KELVIN] = int(round(((ap.color_temp_max - ap.color_temp_min) * self._adaptive_color_temp_factor) + ap.color_temp_min))
-                state_attributes[ATTR_COLOR_MODE] = ColorMode.COLOR_TEMP
+                if not debug:
+                    state_attributes[ATTR_COLOR_MODE] = ColorMode.COLOR_TEMP
             except (ValueError, TypeError):
                 pass
 
@@ -509,7 +524,7 @@ class LayerManagerCoordinator:
 
     def _get_default_state(self, entity_id: str):
         return (self.config.options.get(CONF_ENTITIES, {}).get(entity_id, {}).get(CONF_DEFAULT_STATE, None) or
-            get_domain_default_state(ha.split_entity_id(entity_id)[0]))
+            get_domain_default_state(split_entity_id(entity_id)[0]))
 
     async def async_setup_services(self):
         self.hass.services.async_register(DOMAIN, SERVICE_INSERT_SCENE, self.insert_scene, SERVICE_INSERT_SCENE_SCHEMA)
@@ -602,6 +617,56 @@ class LayerManagerCoordinator:
 
         if (not old_state or old_state.state != new_state.state) and new_state.state == STATE_OFF:
             self._remove_entities_from_adaptive_track([event.data.get(ATTR_ENTITY_ID)])
+
+    @callback
+    def get_summary(self) -> Dict[str, Any]:
+        tracked_layers_dict = {}
+        entities = []
+        adaptive_entities = []
+
+        for entity_id, layers in self.entity_states.items():
+            if entity_id not in self.managed_entities: continue
+
+            for layer_id, data in layers.items():
+                layer_info = tracked_layers_dict.setdefault(layer_id, {
+                    "priority": data.get(ATTR_PRIORITY),
+                    "layer_id": layer_id,
+                    "entities": [],
+                })
+
+                # state_obj = cast(State, data.get(ATTR_STATE))
+
+                layer_info["entities"].append(entity_id)
+                # ] = {
+                #     "state": state_obj.state,
+                #     "attributes": state_obj.attributes
+                # }
+
+            if layers:
+                active_layer = max(layers.items(), key=lambda layer: layer[1][ATTR_PRIORITY])
+                entities.append({
+                    "entity_id": entity_id,
+                    "active_layer": active_layer[0],
+                    "active_layer_priority": active_layer[1][ATTR_PRIORITY]
+                })
+
+        tracked_layers = sorted(tracked_layers_dict.values(), key=lambda data: data["priority"], reverse=True)
+
+
+        for entity_id, props in self.adaptive_entities.items():
+            adaptive_values = {}
+            self._set_adaptive_values(props, adaptive_values)
+            adaptive_entities.append(adaptive_values | props.__dict__)
+
+        return {
+            "layers": tracked_layers,
+            "entities": entities,
+            "adaptive": {
+                "color_factor": self._adaptive_color_temp_factor,
+                "entities": adaptive_entities
+            }
+        }
+
 
 def get_domain_default_state(domain: str):
     if domain in (DOMAIN_LIGHT, DOMAIN_FAN):
