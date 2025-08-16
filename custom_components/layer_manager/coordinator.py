@@ -25,7 +25,7 @@ from homeassistant.components.light import (DOMAIN as DOMAIN_LIGHT, ATTR_COLOR_T
                                             ATTR_BRIGHTNESS, ATTR_RGB_COLOR, ATTR_RGBW_COLOR, ATTR_EFFECT,
                                             ColorMode)
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_ELEVATION, SERVICE_SET_COVER_TILT_POSITION
+from homeassistant.const import ATTR_ELEVATION, SERVICE_SET_COVER_TILT_POSITION, SERVICE_OPEN_COVER, SERVICE_CLOSE_COVER
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_filtered, TrackStates
@@ -397,17 +397,24 @@ class LayerManagerCoordinator:
             self._remove_entities_from_adaptive_track([entity_id])
 
         # Handle service call enhancements
-        if (split_entity_id(entity_id)[0] == DOMAIN_COVER and
-            ATTR_CURRENT_TILT_POSITION in active_state.attributes):
-
-            return (
-                DOMAIN_COVER,
-                SERVICE_SET_COVER_TILT_POSITION,
-                {
-                    ATTR_ENTITY_ID: entity_id,
-                    ATTR_TILT_POSITION: active_state.attributes[ATTR_CURRENT_TILT_POSITION]
-                }
-            )
+        if split_entity_id(entity_id)[0] == DOMAIN_COVER:
+            if ATTR_CURRENT_TILT_POSITION in active_state.attributes:
+                return (
+                    DOMAIN_COVER,
+                    SERVICE_SET_COVER_TILT_POSITION,
+                    {
+                        ATTR_ENTITY_ID: entity_id,
+                        ATTR_TILT_POSITION: active_state.attributes[ATTR_CURRENT_TILT_POSITION]
+                    }
+                )
+            else:
+                return (
+                    DOMAIN_COVER,
+                    active_state.state == CoverState.OPEN and SERVICE_OPEN_COVER or SERVICE_CLOSE_COVER,
+                    {
+                        ATTR_ENTITY_ID: entity_id
+                    }
+                )
 
         return active_state
 
