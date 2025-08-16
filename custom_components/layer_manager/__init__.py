@@ -18,6 +18,7 @@ async def async_setup(hass: HomeAssistant, config: Config):
 
 async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry) -> bool:
     coordinator = LayerManagerCoordinator(hass, config)
+    await coordinator.async_load_from_store()
 
     hass.data.setdefault(DOMAIN, {})[config.entry_id] = coordinator
 
@@ -26,7 +27,6 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry) -> bool:
 
     await coordinator.async_setup_services()
     await coordinator.async_setup_listeners()
-    await coordinator.async_load_from_store()
     await coordinator.async_initial_refresh()
 
     return True

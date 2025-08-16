@@ -132,8 +132,7 @@ class LayerManagerCoordinator:
 
     async def async_load_from_store(self):
         stored_data = await self._store.async_load()
-        if stored_data and "states" in stored_data:
-
+        if stored_data:
             # Load Layers
             for entity_id, layers, in stored_data.get("states", {}).items():
                 self.entity_states[entity_id] = {}
@@ -146,10 +145,6 @@ class LayerManagerCoordinator:
                         ATTR_PRIORITY: data.get(ATTR_PRIORITY),
                         ATTR_STATE: reconstructed_state
                     }
-
-            # Load adaptive tracks
-            for entity_id, ap in stored_data.get("adaptive", {}).items():
-                self._create_adaptive_track(entity_id, {}, AdaptiveProperties(**ap))
 
     def _schedule_save(self):
         serialized_states = {}
@@ -169,8 +164,7 @@ class LayerManagerCoordinator:
 
         async_dispatcher_send(self.hass, SIGNAL_DATA_UPDATE)
         self._store.async_delay_save(lambda: {
-            "states": serialized_states,
-            "adaptive": self.adaptive_entities
+            "states": serialized_states
         }, 1)
 
     async def insert_scene(self, call: ServiceCall):
@@ -428,31 +422,29 @@ class LayerManagerCoordinator:
     def _create_adaptive_track(self, entity_id: str, state_attributes: Dict, props: AdaptiveProperties) -> None:
 
         adaptive_config = self.config.options.get(CONF_ADAPTIVE, {})
+        entity_adaptive_config = self.config.options.get(CONF_ENTITIES, {}).get(entity_id, {}).get(CONF_ADAPTIVE, {})
 
         ap = AdaptiveProperties(
             entity_id=entity_id, enable_brightness=props.enable_brightness,
             enable_color_temp=props.enable_color_temp,
-            brightness_input_entity_id=props.brightness_input_entity_id or adaptive_config.get(CONF_INPUT_BRIGHTNESS_ENTITY),
-            brightness_input_min=props.brightness_input_min or adaptive_config.get(CONF_INPUT_BRIGHTNESS_MIN),
-            brightness_input_max=props.brightness_input_max or adaptive_config.get(CONF_INPUT_BRIGHTNESS_MAX),
-            brightness_min=props.brightness_min or adaptive_config.get(CONF_MIN_BRIGHTNESS),
-            brightness_max=props.brightness_max or adaptive_config.get(CONF_MAX_BRIGHTNESS),
-            color_temp_min=props.color_temp_min or adaptive_config.get(CONF_MIN_COLOR_TEMP),
-            color_temp_max=props.color_temp_max or adaptive_config.get(CONF_MAX_COLOR_TEMP)
+            brightness_input_entity_id=entity_adaptive_config.get(CONF_INPUT_BRIGHTNESS_ENTITY, adaptive_config.get(CONF_INPUT_BRIGHTNESS_ENTITY)),
+            brightness_input_min=entity_adaptive_config.get(CONF_INPUT_BRIGHTNESS_MIN, adaptive_config.get(CONF_INPUT_BRIGHTNESS_MIN)),
+            brightness_input_max=entity_adaptive_config.get(CONF_INPUT_BRIGHTNESS_MAX, adaptive_config.get(CONF_INPUT_BRIGHTNESS_MAX)),
+            brightness_min=entity_adaptive_config.get(CONF_MIN_BRIGHTNESS, adaptive_config.get(CONF_MIN_BRIGHTNESS)),
+            brightness_max=entity_adaptive_config.get(CONF_MAX_BRIGHTNESS, adaptive_config.get(CONF_MAX_BRIGHTNESS)),
+            color_temp_min=entity_adaptive_config.get(CONF_MIN_COLOR_TEMP, adaptive_config.get(CONF_MIN_COLOR_TEMP)),
+            color_temp_max=entity_adaptive_config.get(CONF_MAX_COLOR_TEMP, adaptive_config.get(CONF_MAX_COLOR_TEMP))
         )
 
         self._set_adaptive_values(ap, state_attributes)
         if entity_id not in self.adaptive_entities:
             self._add_entity_to_adaptive_track(ap)
 
-    def _set_adaptive_values(self, ap: AdaptiveProperties, state_attributes: Dict, debug=False) -> None:
+    def _set_adaptive_values(self, ap: AdaptiveProperties, state_attributes: Dict) -> None:
         if ap.enable_brightness and ap.brightness_input_entity_id and (input_state := self.hass.states.get(ap.brightness_input_entity_id)):
             try:
                 input_val = float(input_state.state)
                 norm_val = 1.0 - (float(min(max(input_val, ap.brightness_input_min), ap.brightness_input_max)) / float(ap.brightness_input_max))
-
-                if debug:
-                    state_attributes["brightness_factor"] = norm_val
                 state_attributes[ATTR_BRIGHTNESS] = int(ap.brightness_max - ((ap.brightness_max - ap.brightness_min) * norm_val))
             except (ValueError, TypeError):
                 pass
@@ -460,8 +452,7 @@ class LayerManagerCoordinator:
         if ap.enable_color_temp:
             try:
                 state_attributes[ATTR_COLOR_TEMP_KELVIN] = int(round(((ap.color_temp_max - ap.color_temp_min) * self._adaptive_color_temp_factor) + ap.color_temp_min))
-                if not debug:
-                    state_attributes[ATTR_COLOR_MODE] = ColorMode.COLOR_TEMP
+                state_attributes[ATTR_COLOR_MODE] = ColorMode.COLOR_TEMP
             except (ValueError, TypeError):
                 pass
 
@@ -549,6 +540,10 @@ class LayerManagerCoordinator:
             unsub()
         self._unsub_listeners.clear()
 
+        # Get Initial Sun Value
+        if input_state := self.hass.states.get("sun.sun"):
+            await self._update_sun_factor(input_state)
+
         self._unsub_listeners.append(async_track_state_change_filtered(
             self.hass, TrackStates(False, {"sun.sun"}, None), self.on_sun_changed).async_remove)
 
@@ -575,19 +570,11 @@ class LayerManagerCoordinator:
         if (new_state and
             (not old_state or old_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)) and
             new_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)):
-
-            _LOGGER.warning("Restoring state of %s after it became available...", entity_id)
             await self._apply_entities([entity_id], [], event.context)
 
-    @callback
-    async def on_sun_changed(self, event: Event) -> None:
+    async def _update_sun_factor(self, sun_state: State, context: Context = None) -> None:
 
-        new_state: State = event.data.get("new_state")
-
-        if not new_state or not new_state.attributes.get(ATTR_ELEVATION):
-            return
-
-        elevation = new_state.attributes[ATTR_ELEVATION]
+        elevation = sun_state.attributes[ATTR_ELEVATION]
 
         min_elev = self.config.options.get(CONF_MIN_ELEVATION, 0)
         max_elev = self.config.options.get(CONF_MAX_ELEVATION, 15)
@@ -600,7 +587,17 @@ class LayerManagerCoordinator:
 
         if adaptive_color_temp_factor != self._adaptive_color_temp_factor:
             self._adaptive_color_temp_factor = adaptive_color_temp_factor
-            await self._update_adaptive(event.context, "sun")
+            await self._update_adaptive(context, "sun")
+
+    @callback
+    async def on_sun_changed(self, event: Event) -> None:
+
+        new_state: State = event.data.get("new_state")
+
+        if not new_state or not new_state.attributes.get(ATTR_ELEVATION):
+            return
+
+        await self._update_sun_factor(new_state, event.context)
 
     @callback
     async def on_input_brightness_change(self, event: Event):
@@ -652,11 +649,8 @@ class LayerManagerCoordinator:
 
         tracked_layers = sorted(tracked_layers_dict.values(), key=lambda data: data["priority"], reverse=True)
 
-
         for entity_id, props in self.adaptive_entities.items():
-            adaptive_values = {}
-            self._set_adaptive_values(props, adaptive_values)
-            adaptive_entities.append(adaptive_values | props.__dict__)
+            adaptive_entities.append(props.__dict__)
 
         return {
             "layers": tracked_layers,

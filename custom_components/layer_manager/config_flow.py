@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict
 import voluptuous as vol
+import time
 
 from homeassistant import config_entries
 from homeassistant.components.sensor.const import DOMAIN as DOMAIN_SENSOR
@@ -109,7 +110,8 @@ class LayerManagerOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required("entity_id"): selector.EntitySelector(
                     selector.EntitySelectorConfig(include_entities=managed_entities)
                 )
-            })
+            }),
+            last_step=False
         )
 
     async def async_step_advanced_entity_settings(self, user_input=None):
@@ -117,14 +119,19 @@ class LayerManagerOptionsFlowHandler(config_entries.OptionsFlow):
 
         if user_input is not None:
             entity_conf = self.options[CONF_ENTITIES].get(entity_id, {})
-            adaptive_input = {k: v for k, v in user_input.items() if v is not None and v != "" and v in [
-                    CONF_MIN_COLOR_TEMP, CONF_MAX_COLOR_TEMP, CONF_ADAPTIVE_INPUT_ENTITIES,
+            adaptive_input={}
+
+            for key in [CONF_MIN_COLOR_TEMP, CONF_MAX_COLOR_TEMP,
                     CONF_INPUT_BRIGHTNESS_ENTITY, CONF_INPUT_BRIGHTNESS_MIN, CONF_INPUT_BRIGHTNESS_MAX,
-                    CONF_MIN_BRIGHTNESS, CONF_MAX_BRIGHTNESS
-            ]}
+                    CONF_MIN_BRIGHTNESS, CONF_MAX_BRIGHTNESS]:
+                if key in user_input and user_input[key] is not None and user_input[key] != "":
+                    adaptive_input[key] = user_input[key]
+
             entity_conf[CONF_ADAPTIVE] = adaptive_input
-            entity_conf[CONF_DEFAULT_STATE] = user_input[CONF_DEFAULT_STATE]
+            entity_conf[CONF_DEFAULT_STATE] = user_input.get(CONF_DEFAULT_STATE, None)
+
             self.options[CONF_ENTITIES][entity_id] = entity_conf
+            self.options["version"] = time.time() # Work around to make sure HASS reloads the config
 
             return self.async_create_entry(title="", data=self.options)
 
@@ -141,7 +148,8 @@ class LayerManagerOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="advanced_entity_settings",
             description_placeholders={"entity_id": entity_id},
-            data_schema=vol.Schema(conf_schema)
+            data_schema=vol.Schema(conf_schema),
+            last_step=True
         )
 
     async def async_step_global_adaptive_settings(self, user_input=None):
@@ -159,31 +167,25 @@ class LayerManagerOptionsFlowHandler(config_entries.OptionsFlow):
         }
         schema.update(self._get_adaptive_schema(adaptive_opts, True))
 
-        return self.async_show_form(step_id="global_adaptive_settings", data_schema=vol.Schema(schema))
+        return self.async_show_form(step_id="global_adaptive_settings", data_schema=vol.Schema(schema), last_step=True)
 
     def _get_adaptive_schema(self, options: Dict[str, Any] = None, root_config=False) -> Dict:
         options = options or {}
 
-        input_selector_opts = None
-        if root_config:
-            input_selector_opts = selector.EntitySelectorConfig(domain=[DOMAIN_SENSOR, DOMAIN_NUMBER, DOMAIN_INPUT_NUMBER])
-        else:
-            input_selector_opts = selector.EntitySelectorConfig(include_entities=options.get(CONF_ADAPTIVE_INPUT_ENTITIES, []))
-
         return {
-            vol.Optional(CONF_MIN_BRIGHTNESS, default=options.get(CONF_MIN_BRIGHTNESS)):
+            vol.Optional(CONF_MIN_BRIGHTNESS, description={"suggested_value": options.get(CONF_MIN_BRIGHTNESS)}):
                 selector.NumberSelector(selector.NumberSelectorConfig(min=1, max=255, mode="box")),
-            vol.Optional(CONF_MAX_BRIGHTNESS, default=options.get(CONF_MAX_BRIGHTNESS)):
+            vol.Optional(CONF_MAX_BRIGHTNESS, description={"suggested_value": options.get(CONF_MAX_BRIGHTNESS)}):
                 selector.NumberSelector(selector.NumberSelectorConfig(min=1, max=255, mode="box")),
-            vol.Optional(CONF_MIN_COLOR_TEMP, default=options.get(CONF_MIN_COLOR_TEMP)):
+            vol.Optional(CONF_MIN_COLOR_TEMP, description={"suggested_value": options.get(CONF_MIN_COLOR_TEMP)}):
                 selector.NumberSelector(selector.NumberSelectorConfig(min=0,mode="box")),
-            vol.Optional(CONF_MAX_COLOR_TEMP, default=options.get(CONF_MAX_COLOR_TEMP)):
+            vol.Optional(CONF_MAX_COLOR_TEMP, description={"suggested_value": options.get(CONF_MAX_COLOR_TEMP)}):
                 selector.NumberSelector(selector.NumberSelectorConfig(min=0,mode="box")),
-            vol.Optional(CONF_INPUT_BRIGHTNESS_ENTITY, default=options.get(CONF_INPUT_BRIGHTNESS_ENTITY)):
-                selector.EntitySelector(input_selector_opts),
-            vol.Optional(CONF_INPUT_BRIGHTNESS_MIN, default=options.get(CONF_INPUT_BRIGHTNESS_MIN)):
+            vol.Optional(CONF_INPUT_BRIGHTNESS_ENTITY, description={"suggested_value": options.get(CONF_INPUT_BRIGHTNESS_ENTITY)}):
+                selector.EntitySelector(selector.EntitySelectorConfig(domain=[DOMAIN_SENSOR, DOMAIN_NUMBER, DOMAIN_INPUT_NUMBER])),
+            vol.Optional(CONF_INPUT_BRIGHTNESS_MIN, description={"suggested_value": options.get(CONF_INPUT_BRIGHTNESS_MIN)}):
                 selector.NumberSelector(selector.NumberSelectorConfig(min=0,mode="box")),
-            vol.Optional(CONF_INPUT_BRIGHTNESS_MAX, default=options.get(CONF_INPUT_BRIGHTNESS_MAX)):
+            vol.Optional(CONF_INPUT_BRIGHTNESS_MAX, description={"suggested_value": options.get(CONF_INPUT_BRIGHTNESS_MAX)}):
                 selector.NumberSelector(selector.NumberSelectorConfig(min=0,mode="box"))
         }
 

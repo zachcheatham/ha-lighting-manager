@@ -46,6 +46,6 @@ class LayerStatusSensor(SensorEntity):
     @callback
     def _handle_update(self) -> None:
         info = self.coordinator.get_summary()
-        self._attr_native_value = len(info.get("managed_entities", []))
+        self._attr_native_value = len(info.get("layers", []))
         self._attr_extra_state_attributes = info
         self.async_write_ha_state()

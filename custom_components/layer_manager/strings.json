@@ -29,14 +29,14 @@
                 }
             },
             "advanced_entity_settings": {
-                "description": "Advanced Entity Settings ({entity_id}). Any unset values will use the global default.",
+                "description": "Advanced Entity Settings ({entity_id})",
                 "data": {
                     "default_state": "Default state when there is no active layer.",
                     "brightness_min": "Minimum Adaptive Brightness Value",
                     "brightness_max": "Maximum Adaptive Brightness Value",
                     "color_temp_min": "Minimum Adaptive Color Temp",
                     "color_temp_max": "Maximum Adaptive Color Temp",
-                    "input_brightness_entity": "Adaptive Brightness Sensor Entity. Must first be configured in the global adaptive settings.",
+                    "input_brightness_entity": "Adaptive Brightness Sensor Entity.",
                     "input_brightness_min": "Adaptive Input Sensor Minimum",
                     "input_brightness_max": "Adaptive Input Sensor Maximum"
                 }
