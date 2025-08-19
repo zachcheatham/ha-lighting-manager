@@ -1,28 +1,20 @@
-# Home Assistant Lighting Manager
+# Home Assistant Layer Manager
 
-Instead of maintaining one previous light state using scene.create, this integration allows lights to maintain layers that can be added to or removed from in any order. Very useful for lights that can indicate multiple alerts or other entity's state.
+A powerful integration that allows you to apply and manage multiple "layers" of states to your entities. Perfect for handling notifications and alerts without losing your original states.
 
-## Installation
+## Key Features
 
-1) Install this repository via HACS
+- Apply entity states with priorities.
+- States are saved and restored across restarts.
+- Fully configurable from the Home Assistant UI.
 
-2) Configure the integration via configuration.yaml
+## Installation & Configuration
 
-Example Configuration
-```
-lighting_manager:
-  entities:
-    - light.porch_light_1
-    - light.porch_light_2
-    - light.foh_light_1
-    - light.foh_light_2
-    - light.foh_light_3
-```
+1. Install this integration via HACS and **restart Home Assistant**.
+2. Go to **Settings -> Devices & Services**.
+3. Click **+ Add Integration** and search for **"Layer Manager"**.
+4. After adding, click **CONFIGURE** on the integration card to select the lights you want to manage.
 
-Each light that should be "managed" must be listed in the entities array of the configuration.
+For documentation, including all service call details and examples, please see the [main README file on GitHub](https://github.com/zachcheatham/ha-layer-manager/blob/master/README.md).
 
-## Additional Links
-
-[README](https://github.com/zachcheatham/ha-lighting-manager/blob/master/README.md)
-
-[Repository](https://github.com/zachcheatham/ha-lighting-manager)
+[Repository Link](https://github.com/zachcheatham/ha-layer-manager)
