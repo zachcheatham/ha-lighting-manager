@@ -434,13 +434,13 @@ class LayerManagerCoordinator:
         ap = AdaptiveProperties(
             entity_id=entity_id, enable_brightness=props.enable_brightness,
             enable_color_temp=props.enable_color_temp,
-            brightness_input_entity_id=entity_adaptive_config.get(CONF_INPUT_BRIGHTNESS_ENTITY, adaptive_config.get(CONF_INPUT_BRIGHTNESS_ENTITY)),
-            brightness_input_min=entity_adaptive_config.get(CONF_INPUT_BRIGHTNESS_MIN, adaptive_config.get(CONF_INPUT_BRIGHTNESS_MIN)),
-            brightness_input_max=entity_adaptive_config.get(CONF_INPUT_BRIGHTNESS_MAX, adaptive_config.get(CONF_INPUT_BRIGHTNESS_MAX)),
-            brightness_min=entity_adaptive_config.get(CONF_MIN_BRIGHTNESS, adaptive_config.get(CONF_MIN_BRIGHTNESS)),
-            brightness_max=entity_adaptive_config.get(CONF_MAX_BRIGHTNESS, adaptive_config.get(CONF_MAX_BRIGHTNESS)),
-            color_temp_min=entity_adaptive_config.get(CONF_MIN_COLOR_TEMP, adaptive_config.get(CONF_MIN_COLOR_TEMP)),
-            color_temp_max=entity_adaptive_config.get(CONF_MAX_COLOR_TEMP, adaptive_config.get(CONF_MAX_COLOR_TEMP))
+            brightness_input_entity_id=props.brightness_input_entity_id or entity_adaptive_config.get(CONF_INPUT_BRIGHTNESS_ENTITY, adaptive_config.get(CONF_INPUT_BRIGHTNESS_ENTITY)),
+            brightness_input_min=int(props.brightness_input_min or entity_adaptive_config.get(CONF_INPUT_BRIGHTNESS_MIN, adaptive_config.get(CONF_INPUT_BRIGHTNESS_MIN))),
+            brightness_input_max=int(props.brightness_input_max or entity_adaptive_config.get(CONF_INPUT_BRIGHTNESS_MAX, adaptive_config.get(CONF_INPUT_BRIGHTNESS_MAX))),
+            brightness_min=int(props.brightness_min or entity_adaptive_config.get(CONF_MIN_BRIGHTNESS, adaptive_config.get(CONF_MIN_BRIGHTNESS))),
+            brightness_max=int(props.brightness_max or entity_adaptive_config.get(CONF_MAX_BRIGHTNESS, adaptive_config.get(CONF_MAX_BRIGHTNESS))),
+            color_temp_min=int(props.color_temp_min or entity_adaptive_config.get(CONF_MIN_COLOR_TEMP, adaptive_config.get(CONF_MIN_COLOR_TEMP))),
+            color_temp_max=int(props.color_temp_max or entity_adaptive_config.get(CONF_MAX_COLOR_TEMP, adaptive_config.get(CONF_MAX_COLOR_TEMP)))
         )
 
         self._set_adaptive_values(ap, state_attributes)
@@ -522,7 +522,7 @@ class LayerManagerCoordinator:
 
     def _get_default_state(self, entity_id: str):
         return (self.config.options.get(CONF_ENTITIES, {}).get(entity_id, {}).get(CONF_DEFAULT_STATE, None) or
-            get_domain_default_state(split_entity_id(entity_id)[0]))
+                get_domain_default_state(split_entity_id(entity_id)[0]))
 
     async def async_setup_services(self):
         self.hass.services.async_register(DOMAIN, SERVICE_INSERT_SCENE, self.insert_scene, SERVICE_INSERT_SCENE_SCHEMA)
